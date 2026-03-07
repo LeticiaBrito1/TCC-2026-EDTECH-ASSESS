@@ -1,0 +1,70 @@
+{
+  "name": "Resultado",
+  "type": "object",
+  "properties": {
+    "avaliacao_id": {
+      "type": "string",
+      "description": "ID da avalia\u00e7\u00e3o"
+    },
+    "aluno_id": {
+      "type": "string",
+      "description": "ID do aluno"
+    },
+    "turma_id": {
+      "type": "string",
+      "description": "ID da turma"
+    },
+    "respostas": {
+      "type": "array",
+      "description": "Respostas marcadas pelo aluno",
+      "items": {
+        "type": "object",
+        "properties": {
+          "questao_id": {
+            "type": "string"
+          },
+          "resposta": {
+            "type": "string"
+          },
+          "correta": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "nota": {
+      "type": "number",
+      "description": "Nota obtida"
+    },
+    "total_acertos": {
+      "type": "number",
+      "description": "Total de quest\u00f5es corretas"
+    },
+    "total_questoes": {
+      "type": "number",
+      "description": "Total de quest\u00f5es na prova"
+    },
+    "percentual_acerto": {
+      "type": "number",
+      "description": "Percentual de acertos"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pendente",
+        "corrigido",
+        "revisado"
+      ],
+      "default": "pendente",
+      "description": "Status da corre\u00e7\u00e3o"
+    },
+    "versao_prova": {
+      "type": "number",
+      "description": "Vers\u00e3o da prova que o aluno recebeu"
+    }
+  },
+  "required": [
+    "avaliacao_id",
+    "aluno_id"
+  ]
+}

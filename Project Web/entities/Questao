@@ -1,0 +1,59 @@
+{
+  "name": "Questao",
+  "type": "object",
+  "properties": {
+    "enunciado": {
+      "type": "string",
+      "description": "Texto do enunciado da quest\u00e3o"
+    },
+    "disciplina_id": {
+      "type": "string",
+      "description": "ID da disciplina vinculada"
+    },
+    "tema": {
+      "type": "string",
+      "description": "Tema/assunto da quest\u00e3o"
+    },
+    "nivel_dificuldade": {
+      "type": "string",
+      "enum": [
+        "facil",
+        "medio",
+        "dificil"
+      ],
+      "description": "N\u00edvel de dificuldade"
+    },
+    "alternativas": {
+      "type": "array",
+      "description": "Lista de alternativas (A, B, C, D, E)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "letra": {
+            "type": "string"
+          },
+          "texto": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gabarito": {
+      "type": "string",
+      "description": "Letra da alternativa correta (A, B, C, D ou E)"
+    },
+    "competencia": {
+      "type": "string",
+      "description": "Compet\u00eancia ou habilidade avaliada"
+    },
+    "imagem_url": {
+      "type": "string",
+      "description": "URL de imagem auxiliar da quest\u00e3o"
+    }
+  },
+  "required": [
+    "enunciado",
+    "alternativas",
+    "gabarito"
+  ]
+}

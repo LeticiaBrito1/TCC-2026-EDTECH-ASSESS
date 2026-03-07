@@ -1,0 +1,31 @@
+{
+  "name": "Aluno",
+  "type": "object",
+  "properties": {
+    "nome": {
+      "type": "string",
+      "description": "Nome completo do aluno"
+    },
+    "matricula": {
+      "type": "string",
+      "description": "N\u00famero de matr\u00edcula"
+    },
+    "email": {
+      "type": "string",
+      "description": "E-mail do aluno"
+    },
+    "turma_id": {
+      "type": "string",
+      "description": "ID da turma vinculada"
+    },
+    "ativo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se o aluno est\u00e1 ativo"
+    }
+  },
+  "required": [
+    "nome",
+    "turma_id"
+  ]
+}
