@@ -1,0 +1,232 @@
+import OpenAI from "openai";
+
+const LETRAS = ["A", "B", "C", "D", "E"];
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const hasApiKey = Boolean(process.env.OPENAI_API_KEY);
+const openai = hasApiKey
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const textValue = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  return "";
+};
+
+const normalizeNivel = (value, fallback = "medio") => {
+  const normalized = textValue(value).toLowerCase();
+  if (["facil", "fácil"].includes(normalized)) return "facil";
+  if (["medio", "médio"].includes(normalized)) return "medio";
+  if (["dificil", "difícil"].includes(normalized)) return "dificil";
+  return fallback;
+};
+
+const fallbackQuestions = ({ tema, quantidade, nivel_dificuldade, competencia }) =>
+  Array.from({ length: quantidade }).map((_, index) => ({
+    enunciado: `Questão ${index + 1}: Sobre ${tema}, assinale a alternativa correta.`,
+    alternativas: [
+      { letra: "A", texto: `Definição correta sobre ${tema}.` },
+      { letra: "B", texto: `Afirmação parcialmente correta sobre ${tema}.` },
+      { letra: "C", texto: `Interpretação incorreta sobre ${tema}.` },
+      { letra: "D", texto: `Aplicação não correspondente ao tema.` },
+      { letra: "E", texto: `Alternativa sem relação com o conteúdo.` },
+    ],
+    gabarito: "A",
+    tema,
+    nivel_dificuldade,
+    competencia,
+  }));
+
+const extractJsonString = (content) => {
+  const trimmed = textValue(content);
+  if (!trimmed) return "";
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return trimmed;
+
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch?.[1]) return codeBlockMatch[1].trim();
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  return trimmed;
+};
+
+const normalizeAlternativas = (alternativas) => {
+  if (!Array.isArray(alternativas)) return [];
+
+  return alternativas
+    .slice(0, LETRAS.length)
+    .map((item, index) => {
+      if (typeof item === "string") {
+        return { letra: LETRAS[index], texto: item.trim() };
+      }
+
+      const letraRaw = textValue(item?.letra, item?.letter).toUpperCase();
+      const letra = LETRAS.includes(letraRaw) ? letraRaw : LETRAS[index];
+      const texto = textValue(item?.texto, item?.text, item?.conteudo, item?.content);
+      return { letra, texto };
+    })
+    .filter((item) => item.texto);
+};
+
+const normalizeQuestions = (rawQuestions, defaults) => {
+  if (!Array.isArray(rawQuestions)) return [];
+
+  return rawQuestions
+    .map((item, index) => {
+      const tema = textValue(item?.tema, item?.topic, defaults.tema);
+      const competencia = textValue(item?.competencia, item?.competency, defaults.competencia);
+      const nivel = normalizeNivel(item?.nivel_dificuldade || item?.difficulty, defaults.nivel_dificuldade);
+      const alternativas = normalizeAlternativas(
+        item?.alternativas || item?.alternatives || item?.opcoes || item?.options
+      );
+
+      const gabaritoRaw = textValue(
+        item?.gabarito,
+        item?.correct_answer,
+        item?.correctOption,
+        item?.answer
+      ).toUpperCase();
+
+      const gabarito = alternativas.some((option) => option.letra === gabaritoRaw)
+        ? gabaritoRaw
+        : alternativas[0]?.letra || "A";
+
+      return {
+        enunciado: textValue(
+          item?.enunciado,
+          item?.question,
+          item?.pergunta,
+          `Questão ${index + 1} sobre ${tema}`
+        ),
+        alternativas,
+        gabarito,
+        tema,
+        nivel_dificuldade: nivel,
+        competencia,
+      };
+    })
+    .filter((question) => question.enunciado && question.alternativas.length >= 2);
+};
+
+const buildPrompt = ({
+  titulo,
+  tema,
+  quantidade,
+  nivel_dificuldade,
+  competencia,
+  contexto,
+  linguagem,
+}) => {
+  return [
+    "Você é um professor especialista em avaliações escolares.",
+    `Idioma de saída: ${linguagem || "pt-BR"}.`,
+    `Gere exatamente ${quantidade} questões de múltipla escolha sobre o tema: ${tema}.`,
+    `Nível de dificuldade: ${nivel_dificuldade}.`,
+    competencia ? `Competência alvo: ${competencia}.` : "",
+    contexto ? `Contexto adicional: ${contexto}.` : "",
+    `Título da avaliação: ${titulo || "Avaliação"}.`,
+    "Formato obrigatório de saída (JSON puro):",
+    "{",
+    '  "questions": [',
+    "    {",
+    '      "enunciado": "texto",',
+    '      "alternativas": [',
+    '        {"letra":"A","texto":"..."},',
+    '        {"letra":"B","texto":"..."},',
+    '        {"letra":"C","texto":"..."},',
+    '        {"letra":"D","texto":"..."},',
+    '        {"letra":"E","texto":"..."}',
+    "      ],",
+    '      "gabarito": "A",',
+    '      "tema": "texto",',
+    '      "nivel_dificuldade": "facil|medio|dificil",',
+    '      "competencia": "texto"',
+    "    }",
+    "  ]",
+    "}",
+    "Não inclua markdown, comentários nem explicações fora do JSON.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
+const extractQuestionsPayload = (data) => {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  return data.questions || data.questoes || data.items || data.data || [];
+};
+
+export async function generateQuestions(payload) {
+  const defaults = {
+    tema: payload.tema,
+    competencia: payload.competencia || "",
+    nivel_dificuldade: normalizeNivel(payload.nivel_dificuldade || "medio"),
+  };
+
+  if (!openai) {
+    return {
+      source: "mock",
+      model: null,
+      questions: fallbackQuestions({
+        tema: defaults.tema,
+        quantidade: payload.quantidade,
+        nivel_dificuldade: defaults.nivel_dificuldade,
+        competencia: defaults.competencia,
+      }),
+    };
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "Você gera questões no formato JSON solicitado, sem texto adicional.",
+        },
+        {
+          role: "user",
+          content: buildPrompt(payload),
+        },
+      ],
+    });
+
+    const rawContent = completion.choices?.[0]?.message?.content || "";
+    const parsedContent = JSON.parse(extractJsonString(rawContent));
+    const normalizedQuestions = normalizeQuestions(
+      extractQuestionsPayload(parsedContent),
+      defaults
+    );
+
+    if (normalizedQuestions.length > 0) {
+      return {
+        source: "openai",
+        model: completion.model || OPENAI_MODEL,
+        questions: normalizedQuestions,
+      };
+    }
+  } catch {
+    // Segue para fallback para não bloquear o fluxo no MVP.
+  }
+
+  return {
+    source: "mock",
+    model: null,
+    questions: fallbackQuestions({
+      tema: defaults.tema,
+      quantidade: payload.quantidade,
+      nivel_dificuldade: defaults.nivel_dificuldade,
+      competencia: defaults.competencia,
+    }),
+  };
+}

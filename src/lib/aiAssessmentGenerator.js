@@ -118,6 +118,39 @@ const extractQuestions = (result) => {
   );
 };
 
+const resolveBackendUrl = () => {
+  const configured = textValue(import.meta.env.VITE_BACKEND_URL);
+  if (!configured) return null;
+  return configured.replace(/\/+$/, "");
+};
+
+const callBackendGenerator = async (payload) => {
+  const backendUrl = resolveBackendUrl();
+  if (!backendUrl) return null;
+
+  const response = await fetch(`${backendUrl}/api/ai/generate-questions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let message = `Falha ao gerar questões no backend (${response.status}).`;
+    try {
+      const errorBody = await response.json();
+      if (errorBody?.error) {
+        message = errorBody.error;
+      }
+    } catch {
+      // Mantém a mensagem padrão quando a resposta não é JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+};
+
 export async function generateQuestionsForAssessment({
   titulo,
   tema,
@@ -141,6 +174,24 @@ export async function generateQuestionsForAssessment({
     formato: "multipla_escolha",
     linguagem: "pt-BR",
   };
+
+  try {
+    const backendResult = await callBackendGenerator(payload);
+    if (backendResult) {
+      const normalized = normalizeQuestions(extractQuestions(backendResult), {
+        tema,
+        nivel: normalizeNivel(nivel),
+        competencia,
+        disciplinaId,
+      });
+
+      if (normalized.length > 0) {
+        return { questions: normalized, source: backendResult.source || "backend" };
+      }
+    }
+  } catch (error) {
+    if (!allowFallback) throw error;
+  }
 
   try {
     const response = await appClient.functions.invoke(functionName, payload);
