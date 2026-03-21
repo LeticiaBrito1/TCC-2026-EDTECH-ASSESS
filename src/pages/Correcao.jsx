@@ -1,13 +1,67 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import PageHeader from "@/components/shared/PageHeader";
+import QrCodeScanner from "@/components/shared/QrCodeScanner";
+
+const AVALIACAO_KEYS = ["avaliacao_id", "avaliacaoId", "prova_id", "provaId", "avaliacao", "prova"];
+const ALUNO_KEYS = ["aluno_id", "alunoId", "student_id", "studentId", "aluno", "student"];
+
+const getFirstValue = (obj, keys) => {
+  for (const key of keys) {
+    const value = obj?.[key];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return null;
+};
+
+const parseQrPayload = (rawValue) => {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return null;
+
+  const buildResult = (obj) => {
+    const avaliacaoId = getFirstValue(obj, AVALIACAO_KEYS);
+    const alunoId = getFirstValue(obj, ALUNO_KEYS);
+    if (!avaliacaoId || !alunoId) return null;
+    return { avaliacaoId, alunoId };
+  };
+
+  if (raw.startsWith("{") && raw.endsWith("}")) {
+    try {
+      const parsedJson = JSON.parse(raw);
+      const result = buildResult(parsedJson);
+      if (result) return result;
+    } catch {
+      // Ignora JSON inválido e segue para os outros formatos.
+    }
+  }
+
+  try {
+    const parsedUrl = new URL(raw);
+    const urlParams = Object.fromEntries(parsedUrl.searchParams.entries());
+    const result = buildResult(urlParams);
+    if (result) return result;
+  } catch {
+    // Não é URL, segue fluxo.
+  }
+
+  const normalizedPairs = raw.replace(/[;,|]/g, "&");
+  if (normalizedPairs.includes("=")) {
+    const params = Object.fromEntries(new URLSearchParams(normalizedPairs).entries());
+    const result = buildResult(params);
+    if (result) return result;
+  }
+
+  return null;
+};
 
 export default function Correcao() {
   const [selectedAvaliacao, setSelectedAvaliacao] = useState("");
@@ -15,6 +69,7 @@ export default function Correcao() {
   const [respostas, setRespostas] = useState({});
   const [correcting, setCorrecting] = useState(false);
   const [result, setResult] = useState(null);
+  const [qrFeedback, setQrFeedback] = useState(null);
   const qc = useQueryClient();
 
   const { data: avaliacoes = [] } = useQuery({ queryKey: ["avaliacoes"], queryFn: () => appClient.entities.Avaliacao.list() });
@@ -68,6 +123,49 @@ export default function Correcao() {
     setSelectedAluno("");
   };
 
+  const handleQrDecoded = (decodedValue) => {
+    const parsed = parseQrPayload(decodedValue);
+    if (!parsed) {
+      setQrFeedback({
+        type: "error",
+        message: "QR lido, mas o formato não contém avaliação e aluno.",
+      });
+      return;
+    }
+
+    const avaliacaoEncontrada = avaliacoes.find(a => String(a.id) === parsed.avaliacaoId);
+    const alunoEncontrado = alunos.find(a => String(a.id) === parsed.alunoId);
+
+    if (!avaliacaoEncontrada || !alunoEncontrado) {
+      setQrFeedback({
+        type: "error",
+        message: "IDs do QR não encontrados na base atual.",
+      });
+      return;
+    }
+
+    if (
+      avaliacaoEncontrada.turma_id &&
+      alunoEncontrado.turma_id &&
+      avaliacaoEncontrada.turma_id !== alunoEncontrado.turma_id
+    ) {
+      setQrFeedback({
+        type: "error",
+        message: "A avaliação e o aluno do QR pertencem a turmas diferentes.",
+      });
+      return;
+    }
+
+    setSelectedAvaliacao(avaliacaoEncontrada.id);
+    setSelectedAluno(alunoEncontrado.id);
+    setRespostas({});
+    setResult(null);
+    setQrFeedback({
+      type: "success",
+      message: `QR validado: ${alunoEncontrado.nome} em ${avaliacaoEncontrada.titulo}.`,
+    });
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto">
       <PageHeader title="Correção" description="Corrija as avaliações dos alunos" />
@@ -93,6 +191,26 @@ export default function Correcao() {
                   </Select>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-primary" />
+                Leitura de QR Code (mobile)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Escaneie o QR da prova para preencher avaliação e aluno automaticamente.
+              </p>
+              <QrCodeScanner onDecoded={handleQrDecoded} />
+              {qrFeedback && (
+                <p className={`text-sm ${qrFeedback.type === "success" ? "text-success" : "text-destructive"}`}>
+                  {qrFeedback.message}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -165,7 +283,7 @@ export default function Correcao() {
                 {alunos.find(a => a.id === selectedAluno)?.nome} — {avaliacao?.titulo}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-md mx-auto">
               <div className="p-4 rounded-xl bg-primary/10">
                 <p className="text-2xl font-bold text-primary">{result.nota}</p>
                 <p className="text-xs text-muted-foreground">Nota</p>

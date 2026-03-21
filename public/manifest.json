@@ -1,0 +1,10 @@
+{
+  "name": "EdTech Assess",
+  "short_name": "EdTechAssess",
+  "description": "Plataforma para criação, correção e análise de avaliações.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0f3151"
+}

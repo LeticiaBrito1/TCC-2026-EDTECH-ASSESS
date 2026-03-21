@@ -79,7 +79,7 @@ export default function Relatorios() {
 
       {/* Filtros */}
       <Card>
-        <CardContent className="p-4 flex flex-col sm:flex-row gap-4 items-end">
+        <CardContent className="p-4 flex flex-col sm:flex-row gap-4 items-stretch sm:items-end">
           <div className="space-y-2 flex-1">
             <Label>Turma</Label>
             <Select value={filterTurma} onValueChange={setFilterTurma}>
@@ -100,7 +100,7 @@ export default function Relatorios() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={exportCSV} disabled={filteredResults.length === 0}>
+          <Button className="w-full sm:w-auto" variant="outline" onClick={exportCSV} disabled={filteredResults.length === 0}>
             <Download className="w-4 h-4 mr-2" />Exportar CSV
           </Button>
         </CardContent>

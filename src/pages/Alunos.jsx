@@ -51,7 +51,7 @@ export default function Alunos() {
           <Input placeholder="Buscar alunos..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={filterTurma} onValueChange={setFilterTurma}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Filtrar turma" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Filtrar turma" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as turmas</SelectItem>
             {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
@@ -110,7 +110,7 @@ export default function Alunos() {
           <DialogHeader><DialogTitle>{editing ? "Editar Aluno" : "Novo Aluno"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Nome completo *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Matrícula</Label><Input value={form.matricula} onChange={e => setForm({ ...form, matricula: e.target.value })} /></div>
               <div className="space-y-2"><Label>E-mail</Label><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
             </div>

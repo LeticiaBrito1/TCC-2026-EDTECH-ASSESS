@@ -82,7 +82,7 @@ export default function Questoes() {
           <Input placeholder="Buscar questões..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
             {Object.entries(DIFICULDADES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -115,7 +115,7 @@ export default function Questoes() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}><Pencil className="w-3.5 h-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(q.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
@@ -131,7 +131,7 @@ export default function Questoes() {
           <DialogHeader><DialogTitle>{editing ? "Editar Questão" : "Nova Questão"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Enunciado *</Label><Textarea value={form.enunciado} onChange={e => setForm({ ...form, enunciado: e.target.value })} rows={4} placeholder="Digite o enunciado da questão..." /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Disciplina</Label>
                 <Select value={form.disciplina_id} onValueChange={v => setForm({ ...form, disciplina_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -145,7 +145,7 @@ export default function Questoes() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Tema</Label><Input value={form.tema} onChange={e => setForm({ ...form, tema: e.target.value })} placeholder="Ex: Equações" /></div>
               <div className="space-y-2"><Label>Competência</Label><Input value={form.competencia} onChange={e => setForm({ ...form, competencia: e.target.value })} /></div>
             </div>

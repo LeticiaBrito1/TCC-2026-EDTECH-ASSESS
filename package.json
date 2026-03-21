@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "echo http://localhost:5174/ && vite --host localhost --port 5174 --strictPort",
+    "dev:mobile": "vite --host 0.0.0.0 --port 5174 --strictPort",
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
@@ -54,6 +55,7 @@
     "embla-carousel-react": "^8.5.2",
     "framer-motion": "^11.16.4",
     "html2canvas": "^1.4.1",
+    "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
     "jspdf": "^4.0.0",
     "lodash": "^4.17.21",

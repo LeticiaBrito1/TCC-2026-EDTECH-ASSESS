@@ -77,7 +77,7 @@ export default function Turmas() {
                       <Badge variant="outline" className="text-xs">{NIVEIS[t.nivel] || t.nivel}</Badge>
                       <Badge variant="outline" className="text-xs">{numAlunos} alunos</Badge>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(t)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
@@ -98,7 +98,7 @@ export default function Turmas() {
           <DialogHeader><DialogTitle>{editing ? "Editar Turma" : "Nova Turma"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: 3º Ano A" /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Ano Letivo *</Label><Input value={form.ano_letivo} onChange={e => setForm({ ...form, ano_letivo: e.target.value })} /></div>
               <div className="space-y-2"><Label>Período</Label>
                 <Select value={form.periodo} onValueChange={v => setForm({ ...form, periodo: v })}>
@@ -107,7 +107,7 @@ export default function Turmas() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Nível</Label>
                 <Select value={form.nivel} onValueChange={v => setForm({ ...form, nivel: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

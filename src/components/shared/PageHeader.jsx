@@ -9,7 +9,7 @@ export default function PageHeader({ title, description, action, actionLabel, ac
         {description && <p className="text-muted-foreground mt-1">{description}</p>}
       </div>
       {action && (
-        <Button onClick={action} className="bg-primary hover:bg-primary/90 shadow-md">
+        <Button onClick={action} className="w-full sm:w-auto bg-primary hover:bg-primary/90 shadow-md">
           {ActionIcon && <ActionIcon className="w-4 h-4 mr-2" />}
           {actionLabel}
         </Button>

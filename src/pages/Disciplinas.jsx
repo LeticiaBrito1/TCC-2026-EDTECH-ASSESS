@@ -72,7 +72,7 @@ export default function Disciplinas() {
                     <Badge variant="outline" className="text-xs">{getTurmaName(d.turma_id)}</Badge>
                     {d.carga_horaria && <Badge variant="outline" className="text-xs">{d.carga_horaria}h</Badge>}
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
@@ -91,11 +91,11 @@ export default function Disciplinas() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editing ? "Editar Disciplina" : "Nova Disciplina"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Matemática" /></div>
               <div className="space-y-2"><Label>Código</Label><Input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })} placeholder="Ex: MAT101" /></div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Turma *</Label>
                 <Select value={form.turma_id} onValueChange={v => setForm({ ...form, turma_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>

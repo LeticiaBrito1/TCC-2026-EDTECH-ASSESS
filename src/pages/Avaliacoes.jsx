@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText } from "lucide-react";
+import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { format } from "date-fns";
+import { useToast } from "@/components/ui/use-toast";
+import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
 
 const STATUS_MAP = {
   rascunho: { label: "Rascunho", class: "bg-muted text-muted-foreground" },
@@ -23,15 +25,35 @@ const STATUS_MAP = {
   corrigida: { label: "Corrigida", class: "bg-success/10 text-success" }
 };
 
+const emptyAiForm = {
+  titulo: "",
+  turma_id: "",
+  disciplina_id: "",
+  tema: "",
+  quantidade: 5,
+  nivel: "medio",
+  competencia: "",
+  contexto: "",
+  total_pontos: 10,
+  status: "rascunho",
+  data_aplicacao: "",
+  embaralhar_questoes: true,
+  embaralhar_alternativas: false,
+  instrucoes: ""
+};
+
 export default function Avaliacoes() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
+  const [aiForm, setAiForm] = useState(emptyAiForm);
   const [form, setForm] = useState({
     titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho",
     questoes_ids: [], total_pontos: 10, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: ""
   });
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data: avaliacoes = [] } = useQuery({ queryKey: ["avaliacoes"], queryFn: () => appClient.entities.Avaliacao.list() });
   const { data: turmas = [] } = useQuery({ queryKey: ["turmas"], queryFn: () => appClient.entities.Turma.list() });
@@ -41,10 +63,76 @@ export default function Avaliacoes() {
   const create = useMutation({ mutationFn: (d) => appClient.entities.Avaliacao.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["avaliacoes"] }); closeDialog(); } });
   const update = useMutation({ mutationFn: ({ id, d }) => appClient.entities.Avaliacao.update(id, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["avaliacoes"] }); closeDialog(); } });
   const remove = useMutation({ mutationFn: (id) => appClient.entities.Avaliacao.delete(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["avaliacoes"] }) });
+  const generateWithAi = useMutation({
+    mutationFn: async () => {
+      if (!aiForm.titulo || !aiForm.turma_id || !aiForm.disciplina_id || !aiForm.tema) {
+        throw new Error("Preencha título, turma, disciplina e tema para gerar com IA.");
+      }
+
+      const { questions, source } = await generateQuestionsForAssessment({
+        titulo: aiForm.titulo,
+        tema: aiForm.tema,
+        quantidade: aiForm.quantidade,
+        nivel: aiForm.nivel,
+        disciplinaId: aiForm.disciplina_id,
+        competencia: aiForm.competencia,
+        contexto: aiForm.contexto
+      });
+
+      if (questions.length === 0) {
+        throw new Error("Nenhuma questão foi retornada para gerar a avaliação.");
+      }
+
+      const createdQuestions = await Promise.all(
+        questions.map((question) => appClient.entities.Questao.create(question))
+      );
+
+      const avaliacaoPayload = {
+        titulo: aiForm.titulo,
+        disciplina_id: aiForm.disciplina_id,
+        turma_id: aiForm.turma_id,
+        data_aplicacao: aiForm.data_aplicacao || "",
+        status: aiForm.status || "rascunho",
+        questoes_ids: createdQuestions.map((question) => question.id),
+        total_pontos: Number(aiForm.total_pontos) || 10,
+        embaralhar_questoes: Boolean(aiForm.embaralhar_questoes),
+        embaralhar_alternativas: Boolean(aiForm.embaralhar_alternativas),
+        instrucoes: aiForm.instrucoes || ""
+      };
+
+      const createdAssessment = await appClient.entities.Avaliacao.create(avaliacaoPayload);
+      return { createdAssessment, createdCount: createdQuestions.length, source };
+    },
+    onSuccess: ({ createdCount, source }) => {
+      qc.invalidateQueries({ queryKey: ["questoes"] });
+      qc.invalidateQueries({ queryKey: ["avaliacoes"] });
+      closeAiDialog();
+
+      toast({
+        title: "Avaliação gerada",
+        description:
+          source === "ai"
+            ? `${createdCount} questão(ões) geradas com IA e vinculadas à avaliação.`
+            : `${createdCount} questão(ões) criadas em modo de fallback para continuar o fluxo.`
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Falha ao gerar avaliação",
+        description: error?.message || "Não foi possível gerar a avaliação agora.",
+        variant: "destructive"
+      });
+    }
+  });
 
   const closeDialog = () => {
     setDialogOpen(false); setEditing(null);
     setForm({ titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho", questoes_ids: [], total_pontos: 10, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: "" });
+  };
+
+  const closeAiDialog = () => {
+    setAiDialogOpen(false);
+    setAiForm(emptyAiForm);
   };
 
   const openEdit = (a) => {
@@ -84,6 +172,13 @@ export default function Avaliacoes() {
         <Input placeholder="Buscar avaliações..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
       </div>
 
+      <div className="mb-6">
+        <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setAiDialogOpen(true)}>
+          <Sparkles className="w-4 h-4 mr-2" />
+          Gerar Avaliação com IA
+        </Button>
+      </div>
+
       {filtered.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="Nenhuma avaliação" description="Crie sua primeira avaliação." actionLabel="Criar Avaliação" onAction={() => setDialogOpen(true)} />
       ) : (
@@ -109,7 +204,7 @@ export default function Avaliacoes() {
                     <Badge variant="outline" className="text-xs">{a.questoes_ids?.length || 0} questões</Badge>
                     {a.data_aplicacao && <Badge variant="outline" className="text-xs">{format(new Date(a.data_aplicacao), "dd/MM/yyyy")}</Badge>}
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
@@ -125,7 +220,7 @@ export default function Avaliacoes() {
           <DialogHeader><DialogTitle>{editing ? "Editar Avaliação" : "Nova Avaliação"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Título *</Label><Input value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} placeholder="Ex: Prova 1 - Matemática" /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Turma *</Label>
                 <Select value={form.turma_id} onValueChange={v => setForm({ ...form, turma_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -139,11 +234,11 @@ export default function Avaliacoes() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Data de Aplicação</Label><Input type="date" value={form.data_aplicacao} onChange={e => setForm({ ...form, data_aplicacao: e.target.value })} /></div>
               <div className="space-y-2"><Label>Total de Pontos</Label><Input type="number" value={form.total_pontos} onChange={e => setForm({ ...form, total_pontos: Number(e.target.value) })} /></div>
             </div>
-            <div className="flex gap-6">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               <div className="flex items-center gap-2"><Switch checked={form.embaralhar_questoes} onCheckedChange={v => setForm({ ...form, embaralhar_questoes: v })} /><Label>Embaralhar questões</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.embaralhar_alternativas} onCheckedChange={v => setForm({ ...form, embaralhar_alternativas: v })} /><Label>Embaralhar alternativas</Label></div>
             </div>
@@ -166,6 +261,158 @@ export default function Avaliacoes() {
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
             <Button onClick={handleSubmit} disabled={create.isPending || update.isPending}>{editing ? "Salvar" : "Criar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={aiDialogOpen} onOpenChange={v => { if (!v) closeAiDialog(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Gerar Avaliação com IA</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Título *</Label>
+              <Input
+                value={aiForm.titulo}
+                onChange={e => setAiForm({ ...aiForm, titulo: e.target.value })}
+                placeholder="Ex: Avaliação diagnóstica de Matemática"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Turma *</Label>
+                <Select value={aiForm.turma_id} onValueChange={v => setAiForm({ ...aiForm, turma_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Disciplina *</Label>
+                <Select value={aiForm.disciplina_id} onValueChange={v => setAiForm({ ...aiForm, disciplina_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{disciplinas.map(d => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tema *</Label>
+                <Input
+                  value={aiForm.tema}
+                  onChange={e => setAiForm({ ...aiForm, tema: e.target.value })}
+                  placeholder="Ex: Equações do 1º grau"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Competência</Label>
+                <Input
+                  value={aiForm.competencia}
+                  onChange={e => setAiForm({ ...aiForm, competencia: e.target.value })}
+                  placeholder="Ex: Resolver problemas matemáticos"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Quantidade de Questões</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={aiForm.quantidade}
+                  onChange={e => setAiForm({ ...aiForm, quantidade: Number(e.target.value || 1) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nível</Label>
+                <Select value={aiForm.nivel} onValueChange={v => setAiForm({ ...aiForm, nivel: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="facil">Fácil</SelectItem>
+                    <SelectItem value="medio">Médio</SelectItem>
+                    <SelectItem value="dificil">Difícil</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Total de Pontos</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={aiForm.total_pontos}
+                  onChange={e => setAiForm({ ...aiForm, total_pontos: Number(e.target.value || 10) })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Status da Avaliação</Label>
+                <Select value={aiForm.status} onValueChange={v => setAiForm({ ...aiForm, status: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rascunho">Rascunho</SelectItem>
+                    <SelectItem value="publicada">Publicada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Aplicação</Label>
+                <Input
+                  type="date"
+                  value={aiForm.data_aplicacao}
+                  onChange={e => setAiForm({ ...aiForm, data_aplicacao: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={aiForm.embaralhar_questoes}
+                  onCheckedChange={v => setAiForm({ ...aiForm, embaralhar_questoes: v })}
+                />
+                <Label>Embaralhar questões</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={aiForm.embaralhar_alternativas}
+                  onCheckedChange={v => setAiForm({ ...aiForm, embaralhar_alternativas: v })}
+                />
+                <Label>Embaralhar alternativas</Label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Contexto (opcional)</Label>
+              <Textarea
+                rows={3}
+                value={aiForm.contexto}
+                onChange={e => setAiForm({ ...aiForm, contexto: e.target.value })}
+                placeholder="Informe o contexto da turma, objetivo da prova ou recorte do conteúdo."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Instruções da Avaliação</Label>
+              <Textarea
+                rows={2}
+                value={aiForm.instrucoes}
+                onChange={e => setAiForm({ ...aiForm, instrucoes: e.target.value })}
+                placeholder="Ex: não usar calculadora."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeAiDialog}>Cancelar</Button>
+            <Button onClick={() => generateWithAi.mutate()} disabled={generateWithAi.isPending}>
+              {generateWithAi.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              {generateWithAi.isPending ? "Gerando..." : "Gerar Avaliação com IA"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
