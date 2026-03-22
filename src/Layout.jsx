@@ -13,10 +13,12 @@ import {
   Menu,
   LogOut,
   ScanLine,
-  ChevronDown
+  ChevronDown,
+  Bell
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,10 +40,45 @@ const navItems = [
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
-    appClient.auth.me().then(setUser).catch(() => {});
+    appClient.auth.me().then((currentUser) => {
+      setUser(currentUser);
+      loadNotifications();
+    }).catch(() => {});
+    const intervalId = window.setInterval(loadNotifications, 30000);
+    return () => window.clearInterval(intervalId);
   }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const result = await appClient.notifications.list(10);
+      setNotifications(result.items || []);
+      setUnreadNotifications(Number(result.unread || 0));
+    } catch {
+      // Ignora falha silenciosamente para não quebrar layout.
+    }
+  };
+
+  const markAsRead = async (id) => {
+    try {
+      await appClient.notifications.markAsRead(id);
+      await loadNotifications();
+    } catch {
+      // Ignora falha de marcação.
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await appClient.notifications.markAllAsRead();
+      await loadNotifications();
+    } catch {
+      // Ignora falha de marcação em lote.
+    }
+  };
 
   const getInitials = (name) => {
     if (!name) return "U";
@@ -111,6 +148,53 @@ export default function Layout({ children, currentPageName }) {
           <div className="p-4 border-t" style={{ borderColor: "hsl(218, 75%, 26%)" }}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
+                <button className="flex items-center justify-between w-full px-3 py-2 mb-2 rounded-xl transition-colors"
+                  style={{ color: "hsl(210, 40%, 85%)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "hsl(218, 75%, 26%)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <span className="flex items-center gap-2 text-sm">
+                    <Bell className="w-4 h-4" />
+                    Notificações
+                  </span>
+                  {unreadNotifications > 0 ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-destructive text-white">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
+                  ) : (
+                    <span className="text-xs" style={{ color: "hsl(210, 20%, 70%)" }}>0</span>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+                <div className="px-2 py-1.5 text-sm font-medium flex items-center justify-between">
+                  <span>Notificações</span>
+                  {unreadNotifications > 0 && (
+                    <button className="text-xs text-primary" onClick={markAllAsRead}>
+                      Marcar todas
+                    </button>
+                  )}
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">Sem notificações.</div>
+                ) : (
+                  notifications.map((item) => (
+                    <DropdownMenuItem key={item.id} onClick={() => markAsRead(item.id)} className="items-start">
+                      <div className="space-y-1 py-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{item.title}</span>
+                          {!item.read_at && <Badge variant="secondary" className="text-[10px]">Nova</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{item.message}</p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 w-full px-3 py-2 rounded-xl transition-colors"
                   style={{ color: "hsl(210, 40%, 85%)" }}
                   onMouseEnter={e => e.currentTarget.style.background = "hsl(218, 75%, 26%)"}
@@ -153,7 +237,43 @@ export default function Layout({ children, currentPageName }) {
               </div>
               <span className="font-bold text-foreground">EdTech Assess</span>
             </div>
-            <div className="w-10" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="w-5 h-5" />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+                <div className="px-2 py-1.5 text-sm font-medium flex items-center justify-between">
+                  <span>Notificações</span>
+                  {unreadNotifications > 0 && (
+                    <button className="text-xs text-primary" onClick={markAllAsRead}>
+                      Marcar todas
+                    </button>
+                  )}
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">Sem notificações.</div>
+                ) : (
+                  notifications.map((item) => (
+                    <DropdownMenuItem key={item.id} onClick={() => markAsRead(item.id)} className="items-start">
+                      <div className="space-y-1 py-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{item.title}</span>
+                          {!item.read_at && <Badge variant="secondary" className="text-[10px]">Nova</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{item.message}</p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Download, Target } from "lucide-react";
+import { BarChart3, Download, FileSpreadsheet, FileText, Target } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { Progress } from "@/components/ui/progress";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { jsPDF } from "jspdf";
+import * as XLSX from "xlsx";
 
 export default function Relatorios() {
   const [filterTurma, setFilterTurma] = useState("all");
@@ -59,18 +61,127 @@ export default function Relatorios() {
     }));
   }, [filteredResults, questoes]);
 
-  const exportCSV = () => {
-    const header = "Aluno,Nota,Acertos,Total,Percentual\n";
-    const rows = filteredResults.map(r => {
-      const aluno = alunos.find(a => a.id === r.aluno_id);
-      return `${aluno?.nome || "—"},${r.nota},${r.total_acertos},${r.total_questoes},${r.percentual_acerto}%`;
-    }).join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
+  const desempenhoCompetencias = useMemo(() => {
+    if (filteredResults.length === 0) return [];
+    const map = {};
+
+    filteredResults.forEach((resultado) => {
+      resultado.respostas?.forEach((resposta) => {
+        const questao = questoes.find((q) => q.id === resposta.questao_id);
+        const competencia = String(questao?.competencia || "Sem competência").trim();
+
+        if (!map[competencia]) {
+          map[competencia] = { acertos: 0, total: 0 };
+        }
+
+        map[competencia].total += 1;
+        if (resposta.correta) {
+          map[competencia].acertos += 1;
+        }
+      });
+    });
+
+    return Object.entries(map).map(([competencia, value]) => ({
+      competencia,
+      percentual: value.total > 0 ? Math.round((value.acertos / value.total) * 100) : 0,
+      acertos: value.acertos,
+      total: value.total,
+    }));
+  }, [filteredResults, questoes]);
+
+  const buildExportRows = () =>
+    filteredResults.map((r) => {
+      const aluno = alunos.find((a) => a.id === r.aluno_id);
+      const avaliacao = avaliacoes.find((a) => a.id === r.avaliacao_id);
+      const turma = turmas.find((t) => t.id === r.turma_id);
+
+      return {
+        Aluno: aluno?.nome || "—",
+        Turma: turma?.nome || "—",
+        Avaliacao: avaliacao?.titulo || "—",
+        Nota: r.nota ?? 0,
+        Acertos: `${r.total_acertos ?? 0}/${r.total_questoes ?? 0}`,
+        Percentual: `${r.percentual_acerto ?? 0}%`,
+      };
+    });
+
+  const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "relatorio_resultados.csv";
+    a.download = filename;
     a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    const rows = buildExportRows();
+    const header = Object.keys(rows[0] || {}).join(",");
+    const body = rows.map((row) => Object.values(row).join(",")).join("\n");
+    const content = rows.length > 0 ? `${header}\n${body}` : "Sem dados";
+    downloadBlob(new Blob([content], { type: "text/csv" }), "relatorio_resultados.csv");
+  };
+
+  const exportXLSX = () => {
+    const rows = buildExportRows();
+    const wb = XLSX.utils.book_new();
+
+    const wsResultados = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Info: "Sem dados" }]);
+    const wsResumo = XLSX.utils.json_to_sheet([
+      { Indicador: "Média Geral", Valor: `${stats.media}%` },
+      { Indicador: "Nota Máxima", Valor: `${stats.max}%` },
+      { Indicador: "Nota Mínima", Valor: `${stats.min}%` },
+      { Indicador: "Aprovados", Valor: `${stats.aprovados}/${stats.total}` },
+    ]);
+
+    XLSX.utils.book_append_sheet(wb, wsResultados, "Resultados");
+    XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    downloadBlob(
+      new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      "relatorio_resultados.xlsx"
+    );
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    let y = 14;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Relatório de Resultados", 14, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(`Média geral: ${stats.media}%`, 14, y);
+    y += 6;
+    doc.text(`Aprovados: ${stats.aprovados}/${stats.total}`, 14, y);
+    y += 9;
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Resultados Individuais", 14, y);
+    y += 6;
+
+    const rows = buildExportRows();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+
+    for (const row of rows) {
+      const line = `${row.Aluno} | ${row.Avaliacao} | Nota ${row.Nota} | ${row.Percentual}`;
+      const lines = doc.splitTextToSize(line, 180);
+
+      if (y + lines.length * 5 > 285) {
+        doc.addPage();
+        y = 14;
+      }
+
+      doc.text(lines, 14, y);
+      y += lines.length * 5 + 1;
+    }
+
+    doc.save("relatorio_resultados.pdf");
   };
 
   return (
@@ -100,9 +211,17 @@ export default function Relatorios() {
               </SelectContent>
             </Select>
           </div>
-          <Button className="w-full sm:w-auto" variant="outline" onClick={exportCSV} disabled={filteredResults.length === 0}>
-            <Download className="w-4 h-4 mr-2" />Exportar CSV
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button className="w-full sm:w-auto" variant="outline" onClick={exportCSV} disabled={filteredResults.length === 0}>
+              <Download className="w-4 h-4 mr-2" />CSV
+            </Button>
+            <Button className="w-full sm:w-auto" variant="outline" onClick={exportXLSX} disabled={filteredResults.length === 0}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />XLSX
+            </Button>
+            <Button className="w-full sm:w-auto" variant="outline" onClick={exportPDF} disabled={filteredResults.length === 0}>
+              <FileText className="w-4 h-4 mr-2" />PDF
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -149,6 +268,27 @@ export default function Relatorios() {
                     <Bar dataKey="percentual" fill="hsl(234, 89%, 56%)" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {desempenhoCompetencias.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Desempenho por Competência</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {desempenhoCompetencias.map((item) => (
+                    <div key={item.competencia}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span>{item.competencia}</span>
+                        <span className="font-medium">{item.percentual}%</span>
+                      </div>
+                      <Progress value={item.percentual} />
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}

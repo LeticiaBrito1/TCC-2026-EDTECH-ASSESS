@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 
@@ -19,6 +20,7 @@ export default function Disciplinas() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ nome: "", codigo: "", turma_id: "", carga_horaria: "", descricao: "" });
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data: disciplinas = [] } = useQuery({ queryKey: ["disciplinas"], queryFn: () => appClient.entities.Disciplina.list() });
   const { data: turmas = [] } = useQuery({ queryKey: ["turmas"], queryFn: () => appClient.entities.Turma.list() });
@@ -32,7 +34,15 @@ export default function Disciplinas() {
   const openEdit = (d) => { setEditing(d); setForm({ nome: d.nome, codigo: d.codigo || "", turma_id: d.turma_id || "", carga_horaria: d.carga_horaria || "", descricao: d.descricao || "" }); setDialogOpen(true); };
 
   const handleSubmit = () => {
-    if (!form.nome || !form.turma_id) return;
+    if (!form.nome.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe o nome da disciplina antes de salvar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const data = { ...form, carga_horaria: form.carga_horaria ? Number(form.carga_horaria) : undefined };
     editing ? update.mutate({ id: editing.id, d: data }) : create.mutate(data);
   };
@@ -96,7 +106,7 @@ export default function Disciplinas() {
               <div className="space-y-2"><Label>Código</Label><Input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })} placeholder="Ex: MAT101" /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Turma *</Label>
+              <div className="space-y-2"><Label>Turma</Label>
                 <Select value={form.turma_id} onValueChange={v => setForm({ ...form, turma_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>

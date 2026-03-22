@@ -1,17 +1,19 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode } from "lucide-react";
+import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
 import QrCodeScanner from "@/components/shared/QrCodeScanner";
 
 const AVALIACAO_KEYS = ["avaliacao_id", "avaliacaoId", "prova_id", "provaId", "avaliacao", "prova"];
 const ALUNO_KEYS = ["aluno_id", "alunoId", "student_id", "studentId", "aluno", "student"];
+const VERSAO_KEYS = ["versao", "versão", "version", "prova_versao", "provaVersao"];
 
 const getFirstValue = (obj, keys) => {
   for (const key of keys) {
@@ -31,7 +33,8 @@ const parseQrPayload = (rawValue) => {
     const avaliacaoId = getFirstValue(obj, AVALIACAO_KEYS);
     const alunoId = getFirstValue(obj, ALUNO_KEYS);
     if (!avaliacaoId || !alunoId) return null;
-    return { avaliacaoId, alunoId };
+    const versao = getFirstValue(obj, VERSAO_KEYS);
+    return { avaliacaoId, alunoId, versao };
   };
 
   if (raw.startsWith("{") && raw.endsWith("}")) {
@@ -70,7 +73,9 @@ export default function Correcao() {
   const [correcting, setCorrecting] = useState(false);
   const [result, setResult] = useState(null);
   const [qrFeedback, setQrFeedback] = useState(null);
+  const [ocrFile, setOcrFile] = useState(null);
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data: avaliacoes = [] } = useQuery({ queryKey: ["avaliacoes"], queryFn: () => appClient.entities.Avaliacao.list() });
   const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
@@ -79,6 +84,25 @@ export default function Correcao() {
   const createResult = useMutation({
     mutationFn: (d) => appClient.entities.Resultado.create(d),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["resultados"] })
+  });
+  const correctByOcr = useMutation({
+    mutationFn: (payload) => appClient.corrections.scanOcr(payload),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["resultados"] });
+      setResult(data.resultado);
+      setQrFeedback({
+        type: "success",
+        message: "Correção automática por OCR concluída e salva.",
+      });
+      setOcrFile(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Falha no OCR",
+        description: error?.message || "Não foi possível corrigir pela imagem.",
+        variant: "destructive",
+      });
+    },
   });
 
   const avaliacao = avaliacoes.find(a => a.id === selectedAvaliacao);
@@ -115,6 +139,41 @@ export default function Correcao() {
     await createResult.mutateAsync(resultado);
     setResult(resultado);
     setCorrecting(false);
+  };
+
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo da imagem."));
+      reader.readAsDataURL(file);
+    });
+
+  const handleOcrCorrection = async () => {
+    if (!selectedAvaliacao || !selectedAluno) {
+      toast({
+        title: "Seleção obrigatória",
+        description: "Selecione avaliação e aluno antes de corrigir por OCR.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!ocrFile) {
+      toast({
+        title: "Imagem obrigatória",
+        description: "Selecione uma imagem da folha de respostas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const base64 = await fileToBase64(ocrFile);
+    await correctByOcr.mutateAsync({
+      avaliacao_id: selectedAvaliacao,
+      aluno_id: selectedAluno,
+      image_base64: base64,
+    });
   };
 
   const resetCorrecao = () => {
@@ -162,7 +221,7 @@ export default function Correcao() {
     setResult(null);
     setQrFeedback({
       type: "success",
-      message: `QR validado: ${alunoEncontrado.nome} em ${avaliacaoEncontrada.titulo}.`,
+      message: `QR validado: ${alunoEncontrado.nome} em ${avaliacaoEncontrada.titulo}${parsed.versao ? ` (versão ${parsed.versao})` : ""}.`,
     });
   };
 
@@ -211,6 +270,30 @@ export default function Correcao() {
                   {qrFeedback.message}
                 </p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ImageUp className="w-5 h-5 text-primary" />
+                Correção Automática por OCR
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Faça upload da foto da folha de respostas para tentar correção automática.
+              </p>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setOcrFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-foreground"
+              />
+              <Button onClick={handleOcrCorrection} disabled={correctByOcr.isPending}>
+                {correctByOcr.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImageUp className="w-4 h-4 mr-2" />}
+                {correctByOcr.isPending ? "Processando OCR..." : "Corrigir por OCR"}
+              </Button>
             </CardContent>
           </Card>
 

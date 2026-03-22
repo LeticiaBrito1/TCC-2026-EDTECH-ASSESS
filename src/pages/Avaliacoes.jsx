@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2 } from "lucide-react";
+import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2, Download, Share2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
+import { generateAssessmentPdf } from "@/lib/assessmentPdfGenerator";
 
 const STATUS_MAP = {
   rascunho: { label: "Rascunho", class: "bg-muted text-muted-foreground" },
@@ -45,7 +46,18 @@ const emptyAiForm = {
 export default function Avaliacoes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [pdfTarget, setPdfTarget] = useState(null);
+  const [pdfVersions, setPdfVersions] = useState(1);
+  const [pdfIncludeAnswerKey, setPdfIncludeAnswerKey] = useState(true);
+  const [pdfIncludeStudents, setPdfIncludeStudents] = useState(true);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [syncTarget, setSyncTarget] = useState(null);
+  const [syncProvider, setSyncProvider] = useState("moodle");
+  const [syncIncludeResults, setSyncIncludeResults] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [aiForm, setAiForm] = useState(emptyAiForm);
   const [form, setForm] = useState({
@@ -59,6 +71,7 @@ export default function Avaliacoes() {
   const { data: turmas = [] } = useQuery({ queryKey: ["turmas"], queryFn: () => appClient.entities.Turma.list() });
   const { data: disciplinas = [] } = useQuery({ queryKey: ["disciplinas"], queryFn: () => appClient.entities.Disciplina.list() });
   const { data: questoes = [] } = useQuery({ queryKey: ["questoes"], queryFn: () => appClient.entities.Questao.list() });
+  const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
 
   const create = useMutation({ mutationFn: (d) => appClient.entities.Avaliacao.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["avaliacoes"] }); closeDialog(); } });
   const update = useMutation({ mutationFn: ({ id, d }) => appClient.entities.Avaliacao.update(id, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["avaliacoes"] }); closeDialog(); } });
@@ -135,6 +148,107 @@ export default function Avaliacoes() {
     setAiForm(emptyAiForm);
   };
 
+  const closePdfDialog = () => {
+    setPdfDialogOpen(false);
+    setPdfTarget(null);
+    setPdfVersions(1);
+    setPdfIncludeAnswerKey(true);
+    setPdfIncludeStudents(true);
+    setIsGeneratingPdf(false);
+  };
+
+  const closeSyncDialog = () => {
+    setSyncDialogOpen(false);
+    setSyncTarget(null);
+    setSyncProvider("moodle");
+    setSyncIncludeResults(true);
+    setIsSyncing(false);
+  };
+
+  const openPdfDialog = (assessment) => {
+    setPdfTarget(assessment);
+    setPdfVersions(1);
+    setPdfIncludeAnswerKey(true);
+    setPdfIncludeStudents(true);
+    setPdfDialogOpen(true);
+  };
+
+  const openSyncDialog = (assessment) => {
+    setSyncTarget(assessment);
+    setSyncProvider("moodle");
+    setSyncIncludeResults(true);
+    setSyncDialogOpen(true);
+  };
+
+  const handleGeneratePdf = async () => {
+    if (!pdfTarget) return;
+    setIsGeneratingPdf(true);
+
+    try {
+      const selectedQuestions = (pdfTarget.questoes_ids || [])
+        .map((id) => questoes.find((q) => q.id === id))
+        .filter(Boolean);
+
+      if (selectedQuestions.length === 0) {
+        throw new Error("Essa avaliação não possui questões vinculadas.");
+      }
+
+      const turmaAlunos = alunos.filter((aluno) => aluno.turma_id === pdfTarget.turma_id);
+
+      await generateAssessmentPdf({
+        assessment: pdfTarget,
+        questions: selectedQuestions,
+        alunos: pdfIncludeStudents ? turmaAlunos : [],
+        disciplinaNome: getDisciplinaName(pdfTarget.disciplina_id),
+        turmaNome: getTurmaName(pdfTarget.turma_id),
+        versionsCount: pdfVersions,
+        includeAnswerKey: pdfIncludeAnswerKey,
+      });
+
+      toast({
+        title: "PDF gerado",
+        description: "O arquivo da avaliação foi baixado com sucesso.",
+      });
+      closePdfDialog();
+    } catch (error) {
+      toast({
+        title: "Falha ao gerar PDF",
+        description: error?.message || "Não foi possível gerar o PDF da avaliação.",
+        variant: "destructive",
+      });
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleSyncLms = async () => {
+    if (!syncTarget) return;
+    setIsSyncing(true);
+
+    try {
+      const result = await appClient.integrations.syncLms({
+        provider: syncProvider,
+        avaliacao_id: syncTarget.id,
+        turma_id: syncTarget.turma_id,
+        include_resultados: syncIncludeResults,
+      });
+
+      toast({
+        title: "Sincronização LMS concluída",
+        description: result.sent
+          ? `Payload enviado ao LMS (${syncProvider}).`
+          : `Payload preparado para ${syncProvider}. Configure LMS_WEBHOOK_URL para envio automático.`,
+      });
+      closeSyncDialog();
+    } catch (error) {
+      toast({
+        title: "Falha na integração LMS",
+        description: error?.message || "Não foi possível sincronizar agora.",
+        variant: "destructive",
+      });
+      setIsSyncing(false);
+    }
+  };
+
   const openEdit = (a) => {
     setEditing(a);
     setForm({
@@ -205,6 +319,12 @@ export default function Avaliacoes() {
                     {a.data_aplicacao && <Badge variant="outline" className="text-xs">{format(new Date(a.data_aplicacao), "dd/MM/yyyy")}</Badge>}
                   </div>
                   <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openSyncDialog(a)}>
+                      <Share2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPdfDialog(a)}>
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
@@ -412,6 +532,84 @@ export default function Avaliacoes() {
             <Button onClick={() => generateWithAi.mutate()} disabled={generateWithAi.isPending}>
               {generateWithAi.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
               {generateWithAi.isPending ? "Gerando..." : "Gerar Avaliação com IA"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pdfDialogOpen} onOpenChange={v => { if (!v) closePdfDialog(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gerar PDF da Avaliação</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="text-sm text-muted-foreground">
+              {pdfTarget ? (
+                <>Avaliação: <span className="font-medium text-foreground">{pdfTarget.titulo}</span></>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>Quantidade de versões</Label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={pdfVersions}
+                onChange={(e) => setPdfVersions(Math.max(1, Math.min(10, Number(e.target.value || 1))))}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Gerar folhas individualizadas por aluno (QR com aluno_id)</Label>
+              <Switch checked={pdfIncludeStudents} onCheckedChange={setPdfIncludeStudents} />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Incluir gabarito por versão</Label>
+              <Switch checked={pdfIncludeAnswerKey} onCheckedChange={setPdfIncludeAnswerKey} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closePdfDialog}>Cancelar</Button>
+            <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf}>
+              {isGeneratingPdf ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              {isGeneratingPdf ? "Gerando..." : "Gerar PDF"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={syncDialogOpen} onOpenChange={v => { if (!v) closeSyncDialog(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sincronizar com LMS</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="text-sm text-muted-foreground">
+              {syncTarget ? (
+                <>Avaliação: <span className="font-medium text-foreground">{syncTarget.titulo}</span></>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>Provedor LMS</Label>
+              <Select value={syncProvider} onValueChange={setSyncProvider}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="moodle">Moodle</SelectItem>
+                  <SelectItem value="google_classroom">Google Classroom</SelectItem>
+                  <SelectItem value="teams">Microsoft Teams</SelectItem>
+                  <SelectItem value="custom">Custom/Webhook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Enviar resultados junto com avaliação</Label>
+              <Switch checked={syncIncludeResults} onCheckedChange={setSyncIncludeResults} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeSyncDialog}>Cancelar</Button>
+            <Button onClick={handleSyncLms} disabled={isSyncing}>
+              {isSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Share2 className="w-4 h-4 mr-2" />}
+              {isSyncing ? "Sincronizando..." : "Sincronizar LMS"}
             </Button>
           </DialogFooter>
         </DialogContent>
