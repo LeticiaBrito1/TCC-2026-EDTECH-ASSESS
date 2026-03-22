@@ -20,27 +20,69 @@ const normalizeNivel = (value, fallback = "medio") => {
 };
 
 const normalizeAlternativas = (alternativas) => {
-  if (!Array.isArray(alternativas)) return [];
+  if (Array.isArray(alternativas)) {
+    return alternativas
+      .slice(0, LETRAS.length)
+      .map((item, index) => {
+        if (typeof item === "string") {
+          return { letra: LETRAS[index], texto: item.trim() };
+        }
 
-  return alternativas
-    .slice(0, LETRAS.length)
-    .map((item, index) => {
-      if (typeof item === "string") {
-        return { letra: LETRAS[index], texto: item.trim() };
-      }
+        const texto = textValue(
+          item?.texto,
+          item?.text,
+          item?.conteudo,
+          item?.content
+        );
+
+        const letraRaw = textValue(item?.letra, item?.letter).toUpperCase();
+        const letra = LETRAS.includes(letraRaw) ? letraRaw : LETRAS[index];
+        return { letra, texto };
+      })
+      .filter((item) => item.texto);
+  }
+
+  if (alternativas && typeof alternativas === "object") {
+    return LETRAS.map((letra) => {
+      const rawValue =
+        alternativas?.[letra] ??
+        alternativas?.[letra.toLowerCase()] ??
+        alternativas?.[`opcao_${letra.toLowerCase()}`];
 
       const texto = textValue(
-        item?.texto,
-        item?.text,
-        item?.conteudo,
-        item?.content
+        rawValue,
+        rawValue?.texto,
+        rawValue?.text,
+        rawValue?.conteudo,
+        rawValue?.content
       );
 
-      const letraRaw = textValue(item?.letra, item?.letter).toUpperCase();
-      const letra = LETRAS.includes(letraRaw) ? letraRaw : LETRAS[index];
       return { letra, texto };
-    })
-    .filter((item) => item.texto);
+    }).filter((item) => item.texto);
+  }
+
+  return [];
+};
+
+const normalizeGabarito = (alternativas, ...values) => {
+  const fallback = alternativas[0]?.letra || "A";
+  const normalized = textValue(...values).toUpperCase();
+  if (!normalized) return fallback;
+
+  const letraMatch = normalized.match(/[A-E]/);
+  if (letraMatch && alternativas.some((item) => item.letra === letraMatch[0])) {
+    return letraMatch[0];
+  }
+
+  const numeroMatch = normalized.match(/[1-5]/);
+  if (numeroMatch) {
+    const mapped = LETRAS[Number(numeroMatch[0]) - 1];
+    if (alternativas.some((item) => item.letra === mapped)) {
+      return mapped;
+    }
+  }
+
+  return fallback;
 };
 
 const buildFallbackQuestions = ({ tema, quantidade, nivel, competencia }) => {
@@ -73,19 +115,26 @@ const normalizeQuestions = (rawQuestions, defaults) => {
     const nivel = normalizeNivel(item?.nivel_dificuldade || item?.difficulty, defaults.nivel);
 
     const alternativas = normalizeAlternativas(
-      item?.alternativas || item?.alternatives || item?.opcoes || item?.options
+      item?.alternativas ||
+        item?.alternatives ||
+        item?.opcoes ||
+        item?.options ||
+        {
+          A: item?.A ?? item?.a,
+          B: item?.B ?? item?.b,
+          C: item?.C ?? item?.c,
+          D: item?.D ?? item?.d,
+          E: item?.E ?? item?.e,
+        }
     );
 
-    const gabaritoRaw = textValue(
+    const gabarito = normalizeGabarito(
+      alternativas,
       item?.gabarito,
       item?.correct_answer,
       item?.correctOption,
       item?.answer
-    ).toUpperCase();
-
-    const gabarito = alternativas.some((alt) => alt.letra === gabaritoRaw)
-      ? gabaritoRaw
-      : alternativas[0]?.letra || "A";
+    );
 
     return {
       enunciado: textValue(
@@ -112,43 +161,16 @@ const extractQuestions = (result) => {
   return (
     payload.questoes ||
     payload.questions ||
+    payload.perguntas ||
     payload.items ||
     payload.data ||
     []
   );
 };
 
-const resolveBackendUrl = () => {
-  const configured = textValue(import.meta.env.VITE_BACKEND_URL);
-  if (!configured) return null;
-  return configured.replace(/\/+$/, "");
-};
-
-const callBackendGenerator = async (payload) => {
-  const backendUrl = resolveBackendUrl();
-  if (!backendUrl) return null;
-
-  const response = await fetch(`${backendUrl}/api/ai/generate-questions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    let message = `Falha ao gerar questões no backend (${response.status}).`;
-    try {
-      const errorBody = await response.json();
-      if (errorBody?.error) {
-        message = errorBody.error;
-      }
-    } catch {
-      // Mantém a mensagem padrão quando a resposta não é JSON.
-    }
-
-    throw new Error(message);
-  }
-
-  return response.json();
+const callBackendGenerator = async (functionName, payload) => {
+  const response = await appClient.functions.invoke(functionName, payload);
+  return response?.data ?? response;
 };
 
 export async function generateQuestionsForAssessment({
@@ -163,6 +185,7 @@ export async function generateQuestionsForAssessment({
 }) {
   const functionName = import.meta.env.VITE_AI_FUNCTION_NAME || "gerar_questoes_ia";
   const quantitySafe = Math.max(1, Math.min(20, Number(quantidade || 5)));
+  let lastErrorMessage = "";
 
   const payload = {
     titulo,
@@ -176,7 +199,7 @@ export async function generateQuestionsForAssessment({
   };
 
   try {
-    const backendResult = await callBackendGenerator(payload);
+    const backendResult = await callBackendGenerator(functionName, payload);
     if (backendResult) {
       const normalized = normalizeQuestions(extractQuestions(backendResult), {
         tema,
@@ -186,30 +209,15 @@ export async function generateQuestionsForAssessment({
       });
 
       if (normalized.length > 0) {
-        return { questions: normalized, source: backendResult.source || "backend" };
+        return {
+          questions: normalized,
+          source: backendResult.source || "backend",
+          reason: backendResult.reason || "",
+        };
       }
     }
   } catch (error) {
-    if (!allowFallback) throw error;
-  }
-
-  try {
-    const response = await appClient.functions.invoke(functionName, payload);
-    const normalized = normalizeQuestions(extractQuestions(response), {
-      tema,
-      nivel: normalizeNivel(nivel),
-      competencia,
-      disciplinaId,
-    });
-
-    if (normalized.length > 0) {
-      return { questions: normalized, source: "ai" };
-    }
-
-    if (!allowFallback) {
-      throw new Error("A função não retornou questões válidas.");
-    }
-  } catch (error) {
+    lastErrorMessage = error?.message || "Falha ao acionar o backend de IA.";
     if (!allowFallback) throw error;
   }
 
@@ -220,5 +228,9 @@ export async function generateQuestionsForAssessment({
     competencia,
   }).map((q) => ({ ...q, disciplina_id: disciplinaId }));
 
-  return { questions: fallback, source: "fallback" };
+  return {
+    questions: fallback,
+    source: "fallback",
+    reason: lastErrorMessage || "Retorno inválido da IA. Aplicado fallback local.",
+  };
 }

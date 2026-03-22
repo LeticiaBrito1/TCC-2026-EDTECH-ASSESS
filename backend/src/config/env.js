@@ -7,8 +7,13 @@ export const env = {
   databaseUrl: String(process.env.DATABASE_URL || "").trim(),
   pgSsl: String(process.env.PGSSL || "false").toLowerCase() === "true",
   allowDbFallback: String(process.env.ALLOW_DB_FALLBACK || "true").toLowerCase() === "true",
+  aiProvider: String(process.env.AI_PROVIDER || "ollama").trim().toLowerCase(),
   openAiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
   hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
+  ollamaBaseUrl: String(process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434")
+    .trim()
+    .replace(/\/+$/, ""),
+  ollamaModel: String(process.env.OLLAMA_MODEL || "llama3.2:3b").trim(),
   jwtSecret: String(process.env.JWT_SECRET || "dev-secret").trim(),
   jwtExpiresIn: String(process.env.JWT_EXPIRES_IN || "12h").trim(),
   devAdminEmail: String(process.env.DEV_ADMIN_EMAIL || "admin@edtech.local").trim().toLowerCase(),

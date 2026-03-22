@@ -5,6 +5,7 @@ const backendUrl = String(import.meta.env.VITE_BACKEND_URL || "http://localhost:
 export const isLocalBackendEnabled = Boolean(backendUrl);
 
 const AUTH_TOKEN_KEY = "edtech_access_token";
+let devLoginPromise = null;
 
 const ENTITY_ROUTES = {
   Turma: "turmas",
@@ -48,7 +49,15 @@ const parseErrorResponse = async (response) => {
   }
 };
 
-const request = async (path, { method = "GET", body, skipAuth = false } = {}) => {
+const request = async (
+  path,
+  { method = "GET", body, skipAuth = false } = {},
+  retryOnAuthError = true
+) => {
+  if (!skipAuth) {
+    await ensureDevSession();
+  }
+
   const token = getAuthToken();
   const headers = {
     "Content-Type": "application/json",
@@ -66,6 +75,15 @@ const request = async (path, { method = "GET", body, skipAuth = false } = {}) =>
 
   if (response.status === 401 && !skipAuth) {
     clearAuthToken();
+
+    if (retryOnAuthError) {
+      try {
+        await ensureDevSession();
+        return request(path, { method, body, skipAuth: false }, false);
+      } catch {
+        // Se não conseguir renovar a sessão, segue com o erro original.
+      }
+    }
   }
 
   if (!response.ok) {
@@ -90,6 +108,18 @@ const autoLoginDevUser = async () => {
   if (result?.token) {
     setAuthToken(result.token);
   }
+};
+
+const ensureDevSession = async () => {
+  if (getAuthToken()) return;
+
+  if (!devLoginPromise) {
+    devLoginPromise = autoLoginDevUser().finally(() => {
+      devLoginPromise = null;
+    });
+  }
+
+  await devLoginPromise;
 };
 
 const createEntityClient = (route) => ({

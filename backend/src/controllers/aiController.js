@@ -36,6 +36,7 @@ export const aiController = {
     res.json({
       source: result.source,
       model: result.model,
+      reason: result.reason || "",
       questions: result.questions,
     });
   },

@@ -1,11 +1,11 @@
 import OpenAI from "openai";
+import { env } from "../config/env.js";
 
 const LETRAS = ["A", "B", "C", "D", "E"];
-
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const hasApiKey = Boolean(process.env.OPENAI_API_KEY);
-const openai = hasApiKey
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
+const hasOpenAiKey = Boolean(OPENAI_API_KEY);
+const openai = hasOpenAiKey
+  ? new OpenAI({ apiKey: OPENAI_API_KEY })
   : null;
 
 const textValue = (...values) => {
@@ -25,8 +25,28 @@ const normalizeNivel = (value, fallback = "medio") => {
   return fallback;
 };
 
+const normalizeQuantidade = (value, fallback = 5) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(20, Math.trunc(parsed)));
+};
+
+const isValidProvider = (provider) => ["ollama", "openai"].includes(String(provider || "").toLowerCase());
+
+const resolveProviders = () => {
+  if (isValidProvider(env.aiProvider)) {
+    return [env.aiProvider];
+  }
+
+  if (hasOpenAiKey) {
+    return ["openai", "ollama"];
+  }
+
+  return ["ollama"];
+};
+
 const fallbackQuestions = ({ tema, quantidade, nivel_dificuldade, competencia }) =>
-  Array.from({ length: quantidade }).map((_, index) => ({
+  Array.from({ length: normalizeQuantidade(quantidade) }).map((_, index) => ({
     enunciado: `Questão ${index + 1}: Sobre ${tema}, assinale a alternativa correta.`,
     alternativas: [
       { letra: "A", texto: `Definição correta sobre ${tema}.` },
@@ -59,21 +79,63 @@ const extractJsonString = (content) => {
 };
 
 const normalizeAlternativas = (alternativas) => {
-  if (!Array.isArray(alternativas)) return [];
+  if (Array.isArray(alternativas)) {
+    return alternativas
+      .slice(0, LETRAS.length)
+      .map((item, index) => {
+        if (typeof item === "string") {
+          return { letra: LETRAS[index], texto: item.trim() };
+        }
 
-  return alternativas
-    .slice(0, LETRAS.length)
-    .map((item, index) => {
-      if (typeof item === "string") {
-        return { letra: LETRAS[index], texto: item.trim() };
-      }
+        const letraRaw = textValue(item?.letra, item?.letter).toUpperCase();
+        const letra = LETRAS.includes(letraRaw) ? letraRaw : LETRAS[index];
+        const texto = textValue(item?.texto, item?.text, item?.conteudo, item?.content);
+        return { letra, texto };
+      })
+      .filter((item) => item.texto);
+  }
 
-      const letraRaw = textValue(item?.letra, item?.letter).toUpperCase();
-      const letra = LETRAS.includes(letraRaw) ? letraRaw : LETRAS[index];
-      const texto = textValue(item?.texto, item?.text, item?.conteudo, item?.content);
+  if (alternativas && typeof alternativas === "object") {
+    return LETRAS.map((letra) => {
+      const rawValue =
+        alternativas?.[letra] ??
+        alternativas?.[letra.toLowerCase()] ??
+        alternativas?.[`opcao_${letra.toLowerCase()}`];
+
+      const texto = textValue(
+        rawValue,
+        rawValue?.texto,
+        rawValue?.text,
+        rawValue?.conteudo,
+        rawValue?.content
+      );
+
       return { letra, texto };
-    })
-    .filter((item) => item.texto);
+    }).filter((item) => item.texto);
+  }
+
+  return [];
+};
+
+const normalizeGabarito = (alternativas, ...values) => {
+  const fallback = alternativas[0]?.letra || "A";
+  const normalized = textValue(...values).toUpperCase();
+  if (!normalized) return fallback;
+
+  const letraMatch = normalized.match(/[A-E]/);
+  if (letraMatch && alternativas.some((option) => option.letra === letraMatch[0])) {
+    return letraMatch[0];
+  }
+
+  const numeroMatch = normalized.match(/[1-5]/);
+  if (numeroMatch) {
+    const mapped = LETRAS[Number(numeroMatch[0]) - 1];
+    if (alternativas.some((option) => option.letra === mapped)) {
+      return mapped;
+    }
+  }
+
+  return fallback;
 };
 
 const normalizeQuestions = (rawQuestions, defaults) => {
@@ -85,19 +147,26 @@ const normalizeQuestions = (rawQuestions, defaults) => {
       const competencia = textValue(item?.competencia, item?.competency, defaults.competencia);
       const nivel = normalizeNivel(item?.nivel_dificuldade || item?.difficulty, defaults.nivel_dificuldade);
       const alternativas = normalizeAlternativas(
-        item?.alternativas || item?.alternatives || item?.opcoes || item?.options
+        item?.alternativas ||
+          item?.alternatives ||
+          item?.opcoes ||
+          item?.options ||
+          {
+            A: item?.A ?? item?.a,
+            B: item?.B ?? item?.b,
+            C: item?.C ?? item?.c,
+            D: item?.D ?? item?.d,
+            E: item?.E ?? item?.e,
+          }
       );
 
-      const gabaritoRaw = textValue(
+      const gabarito = normalizeGabarito(
+        alternativas,
         item?.gabarito,
         item?.correct_answer,
         item?.correctOption,
         item?.answer
-      ).toUpperCase();
-
-      const gabarito = alternativas.some((option) => option.letra === gabaritoRaw)
-        ? gabaritoRaw
-        : alternativas[0]?.letra || "A";
+      );
 
       return {
         enunciado: textValue(
@@ -161,34 +230,65 @@ const buildPrompt = ({
 const extractQuestionsPayload = (data) => {
   if (Array.isArray(data)) return data;
   if (!data || typeof data !== "object") return [];
-  return data.questions || data.questoes || data.items || data.data || [];
+  return data.questions || data.questoes || data.perguntas || data.items || data.data || [];
 };
 
-export async function generateQuestions(payload) {
-  const defaults = {
-    tema: payload.tema,
-    competencia: payload.competencia || "",
-    nivel_dificuldade: normalizeNivel(payload.nivel_dificuldade || "medio"),
-  };
+const parseAndNormalizeQuestions = (rawContent, defaults) => {
+  const parsedContent = JSON.parse(extractJsonString(rawContent));
+  const normalizedQuestions = normalizeQuestions(extractQuestionsPayload(parsedContent), defaults);
 
-  if (!openai) {
-    return {
-      source: "mock",
-      model: null,
-      questions: fallbackQuestions({
-        tema: defaults.tema,
-        quantidade: payload.quantidade,
-        nivel_dificuldade: defaults.nivel_dificuldade,
-        competencia: defaults.competencia,
-      }),
-    };
+  if (normalizedQuestions.length === 0) {
+    throw new Error("A IA respondeu, mas o conteúdo não veio em formato válido.");
   }
 
-  try {
-    const completion = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      temperature: 0.7,
-      response_format: { type: "json_object" },
+  return normalizedQuestions;
+};
+
+const generateWithOpenAi = async (payload, defaults) => {
+  if (!openai) {
+    throw new Error("OPENAI_API_KEY não configurada.");
+  }
+
+  const completion = await openai.chat.completions.create({
+    model: env.openAiModel,
+    temperature: 0.7,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: "Você gera questões no formato JSON solicitado, sem texto adicional.",
+      },
+      {
+        role: "user",
+        content: buildPrompt(payload),
+      },
+    ],
+  });
+
+  const rawContent = completion.choices?.[0]?.message?.content || "";
+  const questions = parseAndNormalizeQuestions(rawContent, defaults);
+
+  return {
+    source: "openai",
+    model: completion.model || env.openAiModel,
+    reason: "",
+    questions,
+  };
+};
+
+const generateWithOllama = async (payload, defaults) => {
+  const response = await fetch(`${env.ollamaBaseUrl}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: env.ollamaModel,
+      stream: false,
+      format: "json",
+      options: {
+        temperature: 0.7,
+      },
       messages: [
         {
           role: "system",
@@ -199,29 +299,62 @@ export async function generateQuestions(payload) {
           content: buildPrompt(payload),
         },
       ],
-    });
+    }),
+  });
 
-    const rawContent = completion.choices?.[0]?.message?.content || "";
-    const parsedContent = JSON.parse(extractJsonString(rawContent));
-    const normalizedQuestions = normalizeQuestions(
-      extractQuestionsPayload(parsedContent),
-      defaults
-    );
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Falha ao chamar Ollama (${response.status}): ${textValue(detail) || "sem detalhes"}`);
+  }
 
-    if (normalizedQuestions.length > 0) {
-      return {
-        source: "openai",
-        model: completion.model || OPENAI_MODEL,
-        questions: normalizedQuestions,
-      };
+  const data = await response.json();
+  const rawContent = textValue(data?.message?.content, data?.response);
+
+  if (!rawContent) {
+    throw new Error("Ollama retornou resposta vazia.");
+  }
+
+  const questions = parseAndNormalizeQuestions(rawContent, defaults);
+
+  return {
+    source: "ollama",
+    model: textValue(data?.model, env.ollamaModel),
+    reason: "",
+    questions,
+  };
+};
+
+export async function generateQuestions(payload) {
+  const defaults = {
+    tema: payload.tema,
+    competencia: payload.competencia || "",
+    nivel_dificuldade: normalizeNivel(payload.nivel_dificuldade || "medio"),
+  };
+
+  const providers = resolveProviders();
+  const errors = [];
+
+  for (const provider of providers) {
+    try {
+      if (provider === "openai") {
+        return await generateWithOpenAi(payload, defaults);
+      }
+
+      if (provider === "ollama") {
+        return await generateWithOllama(payload, defaults);
+      }
+    } catch (error) {
+      errors.push(`${provider}: ${error?.message || "erro desconhecido"}`);
     }
-  } catch {
-    // Segue para fallback para não bloquear o fluxo no MVP.
   }
 
   return {
     source: "mock",
     model: null,
+    reason:
+      errors.length > 0
+        ? `Falha na geração com IA (${errors.join(" | ")}). Aplicado fallback local.`
+        : "Nenhum provedor de IA disponível. Aplicado fallback local.",
     questions: fallbackQuestions({
       tema: defaults.tema,
       quantidade: payload.quantidade,

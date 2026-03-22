@@ -43,6 +43,8 @@ const emptyAiForm = {
   instrucoes: ""
 };
 
+const FALLBACK_AI_SOURCES = new Set(["fallback", "mock", "local"]);
+
 export default function Avaliacoes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
@@ -82,7 +84,9 @@ export default function Avaliacoes() {
         throw new Error("Preencha título, turma, disciplina e tema para gerar com IA.");
       }
 
-      const { questions, source } = await generateQuestionsForAssessment({
+      await appClient.auth.me();
+
+      const { questions, source, reason } = await generateQuestionsForAssessment({
         titulo: aiForm.titulo,
         tema: aiForm.tema,
         quantidade: aiForm.quantidade,
@@ -114,19 +118,21 @@ export default function Avaliacoes() {
       };
 
       const createdAssessment = await appClient.entities.Avaliacao.create(avaliacaoPayload);
-      return { createdAssessment, createdCount: createdQuestions.length, source };
+      return { createdAssessment, createdCount: createdQuestions.length, source, reason };
     },
-    onSuccess: ({ createdCount, source }) => {
+    onSuccess: ({ createdCount, source, reason }) => {
       qc.invalidateQueries({ queryKey: ["questoes"] });
       qc.invalidateQueries({ queryKey: ["avaliacoes"] });
       closeAiDialog();
 
+      const normalizedSource = String(source || "").trim().toLowerCase();
+      const usedFallback = FALLBACK_AI_SOURCES.has(normalizedSource);
+
       toast({
         title: "Avaliação gerada",
-        description:
-          source === "ai"
-            ? `${createdCount} questão(ões) geradas com IA e vinculadas à avaliação.`
-            : `${createdCount} questão(ões) criadas em modo de fallback para continuar o fluxo.`
+        description: usedFallback
+          ? `${createdCount} questão(ões) criadas em modo local. ${reason || "Configure OPENAI_API_KEY no backend para geração real por IA."}`
+          : `${createdCount} questão(ões) geradas por IA e vinculadas à avaliação.`
       });
     },
     onError: (error) => {

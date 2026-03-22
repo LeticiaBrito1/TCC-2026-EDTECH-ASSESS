@@ -29,6 +29,24 @@ O backend está usando PostgreSQL.
 4. Inicie a API:
    - `npm run backend:dev`
 
+## IA gratuita local (Ollama)
+
+Por padrão, o backend está configurado para usar Ollama local (`AI_PROVIDER=ollama`).
+
+1. Instale o Ollama: `https://ollama.com/download`
+2. Baixe um modelo:
+   - `ollama pull llama3.2:3b`
+3. Inicie o Ollama (normalmente ele sobe como serviço local na porta `11434`).
+4. Confirme as variáveis no `backend/.env`:
+   - `AI_PROVIDER=ollama`
+   - `OLLAMA_BASE_URL=http://127.0.0.1:11434`
+   - `OLLAMA_MODEL=llama3.2:3b`
+
+Quando quiser migrar para serviço pago, altere:
+
+- `AI_PROVIDER=openai`
+- `OPENAI_API_KEY=...`
+
 ## Endpoints
 
 - `GET /api/health`
@@ -73,8 +91,8 @@ Entidades suportadas:
 
 ```json
 {
-  "source": "openai",
-  "model": "gpt-4o-mini",
+  "source": "ollama",
+  "model": "llama3.2:3b",
   "questions": [
     {
       "enunciado": "Questão...",
