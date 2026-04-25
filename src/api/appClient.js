@@ -5,6 +5,7 @@ const backendUrl = String(import.meta.env.VITE_BACKEND_URL || "http://localhost:
 export const isLocalBackendEnabled = Boolean(backendUrl);
 
 const AUTH_TOKEN_KEY = "edtech_access_token";
+const LEGACY_AUTH_TOKEN_KEYS = ["app_access_token", "access_token", "token"];
 let devLoginPromise = null;
 
 const ENTITY_ROUTES = {
@@ -35,6 +36,9 @@ const setAuthToken = (token) => {
 const clearAuthToken = () => {
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    for (const key of LEGACY_AUTH_TOKEN_KEYS) {
+      window.localStorage.removeItem(key);
+    }
   } catch {
     // Ignora falha de storage.
   }
@@ -80,8 +84,13 @@ const request = async (
       try {
         await ensureDevSession();
         return request(path, { method, body, skipAuth: false }, false);
-      } catch {
-        // Se não conseguir renovar a sessão, segue com o erro original.
+      } catch (renewError) {
+        const originalError = await parseErrorResponse(response);
+        throw new Error(
+          `${originalError}. Falha ao renovar sessão automaticamente: ${
+            renewError?.message || "erro desconhecido"
+          }`
+        );
       }
     }
   }
@@ -94,20 +103,73 @@ const request = async (
   return response.json();
 };
 
+const buildDevCredentialCandidates = () => {
+  const configuredEmail = String(import.meta.env.VITE_DEV_USER_EMAIL || "").trim();
+  const configuredPassword = String(import.meta.env.VITE_DEV_USER_PASSWORD || "").trim();
+
+  const rawCandidates = [
+    {
+      email: configuredEmail,
+      password: configuredPassword,
+      source: "VITE_DEV_USER",
+    },
+    {
+      email: "professor@edtech.local",
+      password: "123456",
+      source: "fallback_professor",
+    },
+    {
+      email: "admin@edtech.local",
+      password: "123456",
+      source: "fallback_admin",
+    },
+  ].filter((candidate) => candidate.email && candidate.password);
+
+  const uniqueCandidates = [];
+  const seen = new Set();
+
+  for (const candidate of rawCandidates) {
+    const key = `${candidate.email}::${candidate.password}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueCandidates.push(candidate);
+  }
+
+  return uniqueCandidates;
+};
+
 const autoLoginDevUser = async () => {
   if (getAuthToken()) return;
 
-  const email = String(import.meta.env.VITE_DEV_USER_EMAIL || "professor@edtech.local").trim();
-  const password = String(import.meta.env.VITE_DEV_USER_PASSWORD || "123456").trim();
-  const result = await request("/api/auth/login", {
-    method: "POST",
-    skipAuth: true,
-    body: { email, password },
-  });
+  const candidates = buildDevCredentialCandidates();
+  const errors = [];
 
-  if (result?.token) {
-    setAuthToken(result.token);
+  for (const candidate of candidates) {
+    try {
+      const result = await request("/api/auth/login", {
+        method: "POST",
+        skipAuth: true,
+        body: {
+          email: candidate.email,
+          password: candidate.password,
+        },
+      });
+
+      if (result?.token) {
+        setAuthToken(result.token);
+        return;
+      }
+
+      errors.push(`${candidate.email} (${candidate.source}): token ausente na resposta`);
+    } catch (error) {
+      errors.push(`${candidate.email} (${candidate.source}): ${error?.message || "erro desconhecido"}`);
+    }
   }
+
+  clearAuthToken();
+  throw new Error(
+    `Não foi possível autenticar usuário de desenvolvimento. Tentativas: ${errors.join(" | ")}`
+  );
 };
 
 const ensureDevSession = async () => {
@@ -170,10 +232,7 @@ const createClient = () => {
         }
         return result?.user || null;
       },
-      me: async () => {
-        await autoLoginDevUser();
-        return request("/api/auth/me");
-      },
+      me: async () => request("/api/auth/me"),
       logout: () => {
         clearAuthToken();
       },

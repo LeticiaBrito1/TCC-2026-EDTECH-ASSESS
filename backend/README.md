@@ -18,12 +18,22 @@ O backend está usando PostgreSQL.
 - Tabela principal: `app_entities`
 - Campos: `id`, `entity_type`, `data (jsonb)`, `created_at`, `updated_at`
 - A tabela e índices são criados automaticamente na inicialização.
+- Persistência recomendada: `ALLOW_DB_FALLBACK=false` (evita subir em memória sem você perceber).
+
+### Como validar se está persistindo
+
+1. Chame `GET /api/health`
+2. Confirme:
+   - `database_mode` = `postgres`
+   - `database_persistent` = `true`
+3. Se vier `memory`, os dados serão perdidos ao reiniciar.
 
 ## Rodar localmente
 
 1. Suba o PostgreSQL local:
    - `docker compose -f backend/docker-compose.yml up -d`
 2. Copie `.env.example` para `.env` na pasta `backend`.
+   - Mantenha `ALLOW_DB_FALLBACK=false` para garantir persistência real.
 3. Instale dependências:
    - `npm --prefix backend install`
 4. Inicie a API:
@@ -41,6 +51,13 @@ Por padrão, o backend está configurado para usar Ollama local (`AI_PROVIDER=ol
    - `AI_PROVIDER=ollama`
    - `OLLAMA_BASE_URL=http://127.0.0.1:11434`
    - `OLLAMA_MODEL=llama3.2:3b`
+   - Opcional para ambientes mistos (WSL/Docker): `OLLAMA_BASE_URLS=http://127.0.0.1:11434,http://host.docker.internal:11434`
+
+Observação importante:
+
+- O backend tenta múltiplos endpoints locais do Ollama automaticamente (`127.0.0.1`, `localhost`, `host.docker.internal` e IP do host em WSL, quando disponível).
+- Se você já sabe o endpoint correto, defina `OLLAMA_BASE_URL` para ele.
+- Se quiser controlar explicitamente a ordem das tentativas, use `OLLAMA_BASE_URLS` (lista separada por vírgula).
 
 Quando quiser migrar para serviço pago, altere:
 

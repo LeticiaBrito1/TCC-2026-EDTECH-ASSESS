@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { readFileSync } from "node:fs";
 import { env } from "../config/env.js";
 
 const LETRAS = ["A", "B", "C", "D", "E"];
@@ -7,6 +8,36 @@ const hasOpenAiKey = Boolean(OPENAI_API_KEY);
 const openai = hasOpenAiKey
   ? new OpenAI({ apiKey: OPENAI_API_KEY })
   : null;
+const OLLAMA_TIMEOUT_MS = 120000;
+const PREVIEW_MAX_CHARS = 240;
+
+const elapsedMs = (startedAt) => Date.now() - startedAt;
+
+const previewText = (value) => textValue(value).slice(0, PREVIEW_MAX_CHARS);
+
+const logAiInfo = (message, details) => {
+  if (details === undefined) {
+    console.log(`[ai-service] ${message}`);
+    return;
+  }
+  console.log(`[ai-service] ${message}`, details);
+};
+
+const logAiWarn = (message, details) => {
+  if (details === undefined) {
+    console.warn(`[ai-service] ${message}`);
+    return;
+  }
+  console.warn(`[ai-service] ${message}`, details);
+};
+
+const logAiError = (message, details) => {
+  if (details === undefined) {
+    console.error(`[ai-service] ${message}`);
+    return;
+  }
+  console.error(`[ai-service] ${message}`, details);
+};
 
 const textValue = (...values) => {
   for (const value of values) {
@@ -15,6 +46,101 @@ const textValue = (...values) => {
     if (normalized) return normalized;
   }
   return "";
+};
+
+const normalizeUrl = (value) => {
+  const normalized = textValue(value).replace(/\/+$/, "");
+  if (!normalized) return "";
+  if (!/^https?:\/\//i.test(normalized)) {
+    return `http://${normalized}`;
+  }
+  return normalized;
+};
+
+const readWslHostIp = () => {
+  try {
+    const resolvConf = readFileSync("/etc/resolv.conf", "utf8");
+    const match = resolvConf.match(/^nameserver\s+([^\s#]+)$/m);
+    return textValue(match?.[1]);
+  } catch {
+    return "";
+  }
+};
+
+const uniqueUrls = (urls) => {
+  const seen = new Set();
+  const result = [];
+
+  for (const rawUrl of urls) {
+    const normalized = normalizeUrl(rawUrl);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  return result;
+};
+
+const resolveOllamaBaseUrls = () => {
+  const configuredBaseUrl = normalizeUrl(env.ollamaBaseUrl);
+  const configuredList = String(process.env.OLLAMA_BASE_URLS || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const candidates = [configuredBaseUrl, ...configuredList];
+  const defaultPort = "11434";
+
+  try {
+    const parsedConfigured = new URL(configuredBaseUrl || "http://127.0.0.1:11434");
+    const port = parsedConfigured.port || defaultPort;
+    const protocol = parsedConfigured.protocol || "http:";
+    const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+
+    if (localHosts.has(parsedConfigured.hostname.toLowerCase())) {
+      candidates.push(
+        `${protocol}//127.0.0.1:${port}`,
+        `${protocol}//localhost:${port}`,
+        `${protocol}//host.docker.internal:${port}`
+      );
+
+      const wslHostIp = readWslHostIp();
+      if (wslHostIp && !localHosts.has(wslHostIp.toLowerCase())) {
+        candidates.push(`${protocol}//${wslHostIp}:${port}`);
+      }
+    }
+  } catch {
+    // Ignora erro de parsing e segue com os candidatos configurados.
+  }
+
+  return uniqueUrls(candidates);
+};
+
+const fetchJsonWithTimeout = async (url, options = {}, timeoutMs = OLLAMA_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const formatOllamaError = (error) => {
+  if (error?.name === "AbortError") {
+    return `timeout após ${Math.round(OLLAMA_TIMEOUT_MS / 1000)}s`;
+  }
+
+  const causeCode = textValue(error?.cause?.code);
+  const causeMessage = textValue(error?.cause?.message);
+  const message = textValue(error?.message);
+
+  return textValue(causeCode, causeMessage, message, "erro desconhecido");
 };
 
 const normalizeNivel = (value, fallback = "medio") => {
@@ -234,10 +360,24 @@ const extractQuestionsPayload = (data) => {
 };
 
 const parseAndNormalizeQuestions = (rawContent, defaults) => {
-  const parsedContent = JSON.parse(extractJsonString(rawContent));
+  let parsedContent;
+
+  try {
+    parsedContent = JSON.parse(extractJsonString(rawContent));
+  } catch (error) {
+    logAiWarn("Falha ao converter resposta da IA em JSON.", {
+      error: error?.message || "erro desconhecido",
+      raw_preview: previewText(rawContent),
+    });
+    throw new Error(`Falha ao converter resposta da IA em JSON: ${error?.message || "erro desconhecido"}`);
+  }
+
   const normalizedQuestions = normalizeQuestions(extractQuestionsPayload(parsedContent), defaults);
 
   if (normalizedQuestions.length === 0) {
+    logAiWarn("Resposta da IA veio sem questões válidas após normalização.", {
+      raw_preview: previewText(rawContent),
+    });
     throw new Error("A IA respondeu, mas o conteúdo não veio em formato válido.");
   }
 
@@ -245,9 +385,17 @@ const parseAndNormalizeQuestions = (rawContent, defaults) => {
 };
 
 const generateWithOpenAi = async (payload, defaults) => {
+  const startedAt = Date.now();
+
   if (!openai) {
     throw new Error("OPENAI_API_KEY não configurada.");
   }
+
+  logAiInfo("Iniciando chamada ao provedor OpenAI.", {
+    model: env.openAiModel,
+    tema: payload.tema,
+    quantidade: payload.quantidade,
+  });
 
   const completion = await openai.chat.completions.create({
     model: env.openAiModel,
@@ -268,6 +416,12 @@ const generateWithOpenAi = async (payload, defaults) => {
   const rawContent = completion.choices?.[0]?.message?.content || "";
   const questions = parseAndNormalizeQuestions(rawContent, defaults);
 
+  logAiInfo("OpenAI respondeu com sucesso.", {
+    model: completion.model || env.openAiModel,
+    questions: questions.length,
+    duration_ms: elapsedMs(startedAt),
+  });
+
   return {
     source: "openai",
     model: completion.model || env.openAiModel,
@@ -277,54 +431,116 @@ const generateWithOpenAi = async (payload, defaults) => {
 };
 
 const generateWithOllama = async (payload, defaults) => {
-  const response = await fetch(`${env.ollamaBaseUrl}/api/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: env.ollamaModel,
-      stream: false,
-      format: "json",
-      options: {
-        temperature: 0.7,
-      },
-      messages: [
-        {
-          role: "system",
-          content: "Você gera questões no formato JSON solicitado, sem texto adicional.",
-        },
-        {
-          role: "user",
-          content: buildPrompt(payload),
-        },
-      ],
-    }),
+  const startedAt = Date.now();
+  const baseUrls = resolveOllamaBaseUrls();
+  const errors = [];
+
+  logAiInfo("Iniciando chamada ao provedor Ollama.", {
+    model: env.ollamaModel,
+    timeout_ms: OLLAMA_TIMEOUT_MS,
+    attempts: baseUrls,
+    tema: payload.tema,
+    quantidade: payload.quantidade,
   });
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Falha ao chamar Ollama (${response.status}): ${textValue(detail) || "sem detalhes"}`);
+  for (const baseUrl of baseUrls) {
+    const attemptStartedAt = Date.now();
+
+    try {
+      logAiInfo("Tentando endpoint Ollama.", { base_url: baseUrl });
+
+      const response = await fetchJsonWithTimeout(`${baseUrl}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: env.ollamaModel,
+          stream: false,
+          format: "json",
+          options: {
+            temperature: 0.7,
+          },
+          messages: [
+            {
+              role: "system",
+              content: "Você gera questões no formato JSON solicitado, sem texto adicional.",
+            },
+            {
+              role: "user",
+              content: buildPrompt(payload),
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        const errorDetail = `${baseUrl}: HTTP ${response.status} (${textValue(detail) || "sem detalhes"})`;
+        errors.push(errorDetail);
+        logAiWarn("Endpoint Ollama retornou HTTP de erro.", {
+          base_url: baseUrl,
+          status: response.status,
+          detail: previewText(detail),
+          duration_ms: elapsedMs(attemptStartedAt),
+        });
+        continue;
+      }
+
+      const data = await response.json();
+      const rawContent = textValue(data?.message?.content, data?.response);
+
+      if (!rawContent) {
+        const emptyError = `${baseUrl}: resposta vazia`;
+        errors.push(emptyError);
+        logAiWarn("Endpoint Ollama respondeu sem conteúdo.", {
+          base_url: baseUrl,
+          duration_ms: elapsedMs(attemptStartedAt),
+        });
+        continue;
+      }
+
+      const questions = parseAndNormalizeQuestions(rawContent, defaults);
+      const model = textValue(data?.model, env.ollamaModel);
+
+      logAiInfo("Endpoint Ollama respondeu com sucesso.", {
+        base_url: baseUrl,
+        model,
+        questions: questions.length,
+        attempt_duration_ms: elapsedMs(attemptStartedAt),
+        total_duration_ms: elapsedMs(startedAt),
+      });
+
+      return {
+        source: "ollama",
+        model,
+        reason: "",
+        questions,
+      };
+    } catch (error) {
+      const errorMessage = formatOllamaError(error);
+      errors.push(`${baseUrl}: ${errorMessage}`);
+      logAiWarn("Falha ao chamar endpoint Ollama.", {
+        base_url: baseUrl,
+        error: errorMessage,
+        duration_ms: elapsedMs(attemptStartedAt),
+      });
+    }
   }
 
-  const data = await response.json();
-  const rawContent = textValue(data?.message?.content, data?.response);
+  logAiError("Falha em todas as tentativas com Ollama.", {
+    attempts: baseUrls,
+    errors,
+    total_duration_ms: elapsedMs(startedAt),
+  });
 
-  if (!rawContent) {
-    throw new Error("Ollama retornou resposta vazia.");
-  }
-
-  const questions = parseAndNormalizeQuestions(rawContent, defaults);
-
-  return {
-    source: "ollama",
-    model: textValue(data?.model, env.ollamaModel),
-    reason: "",
-    questions,
-  };
+  throw new Error(
+    `Falha ao chamar Ollama. Tentativas: ${errors.join(" | ") || "nenhuma URL disponível"}.`
+  );
 };
 
 export async function generateQuestions(payload) {
+  const startedAt = Date.now();
   const defaults = {
     tema: payload.tema,
     competencia: payload.competencia || "",
@@ -334,19 +550,59 @@ export async function generateQuestions(payload) {
   const providers = resolveProviders();
   const errors = [];
 
+  logAiInfo("Fluxo de geração iniciado.", {
+    configured_provider: env.aiProvider,
+    selected_providers: providers,
+    has_openai_key: hasOpenAiKey,
+    tema: payload.tema,
+    quantidade: payload.quantidade,
+    nivel_dificuldade: defaults.nivel_dificuldade,
+  });
+
   for (const provider of providers) {
+    const providerStartedAt = Date.now();
+
     try {
       if (provider === "openai") {
-        return await generateWithOpenAi(payload, defaults);
+        const result = await generateWithOpenAi(payload, defaults);
+        logAiInfo("Provedor concluído com sucesso.", {
+          provider,
+          source: result.source,
+          model: result.model || "",
+          questions: result.questions.length,
+          duration_ms: elapsedMs(providerStartedAt),
+          total_duration_ms: elapsedMs(startedAt),
+        });
+        return result;
       }
 
       if (provider === "ollama") {
-        return await generateWithOllama(payload, defaults);
+        const result = await generateWithOllama(payload, defaults);
+        logAiInfo("Provedor concluído com sucesso.", {
+          provider,
+          source: result.source,
+          model: result.model || "",
+          questions: result.questions.length,
+          duration_ms: elapsedMs(providerStartedAt),
+          total_duration_ms: elapsedMs(startedAt),
+        });
+        return result;
       }
     } catch (error) {
-      errors.push(`${provider}: ${error?.message || "erro desconhecido"}`);
+      const errorMessage = error?.message || "erro desconhecido";
+      errors.push(`${provider}: ${errorMessage}`);
+      logAiWarn("Provedor falhou, tentando próximo se disponível.", {
+        provider,
+        error: errorMessage,
+        duration_ms: elapsedMs(providerStartedAt),
+      });
     }
   }
+
+  logAiWarn("Nenhum provedor de IA respondeu com sucesso. Aplicando fallback local.", {
+    errors,
+    total_duration_ms: elapsedMs(startedAt),
+  });
 
   return {
     source: "mock",

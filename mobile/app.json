@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "EdTech Assess Mobile",
+    "slug": "edtech-assess-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Este app usa a camera para ler QR Code e capturar folhas de resposta.",
+        "NSPhotoLibraryUsageDescription": "Este app precisa acessar sua galeria para enviar fotos da prova."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

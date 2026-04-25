@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/AlertDialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
-import { format } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
 import { generateAssessmentPdf } from "@/lib/assessmentPdfGenerator";
@@ -61,6 +71,12 @@ export default function Avaliacoes() {
   const [syncIncludeResults, setSyncIncludeResults] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [turmaFilter, setTurmaFilter] = useState("all");
+  const [disciplinaFilter, setDisciplinaFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("data_desc");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [aiForm, setAiForm] = useState(emptyAiForm);
   const [form, setForm] = useState({
     titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho",
@@ -74,10 +90,29 @@ export default function Avaliacoes() {
   const { data: disciplinas = [] } = useQuery({ queryKey: ["disciplinas"], queryFn: () => appClient.entities.Disciplina.list() });
   const { data: questoes = [] } = useQuery({ queryKey: ["questoes"], queryFn: () => appClient.entities.Questao.list() });
   const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
+  const hasActiveFilters = Boolean(search.trim() || statusFilter !== "all" || turmaFilter !== "all" || disciplinaFilter !== "all" || sortBy !== "data_desc");
 
   const create = useMutation({ mutationFn: (d) => appClient.entities.Avaliacao.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["avaliacoes"] }); closeDialog(); } });
   const update = useMutation({ mutationFn: ({ id, d }) => appClient.entities.Avaliacao.update(id, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["avaliacoes"] }); closeDialog(); } });
-  const remove = useMutation({ mutationFn: (id) => appClient.entities.Avaliacao.delete(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["avaliacoes"] }) });
+  const remove = useMutation({
+    mutationFn: ({ id }) => appClient.entities.Avaliacao.delete(id),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["avaliacoes"] });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+      toast({
+        title: "Avaliação excluída",
+        description: variables?.title ? `"${variables.title}" foi removida.` : "A avaliação foi removida com sucesso.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Falha ao excluir avaliação",
+        description: error?.message || "Não foi possível excluir esta avaliação agora.",
+        variant: "destructive",
+      });
+    },
+  });
   const generateWithAi = useMutation({
     mutationFn: async () => {
       if (!aiForm.titulo || !aiForm.turma_id || !aiForm.disciplina_id || !aiForm.tema) {
@@ -131,7 +166,7 @@ export default function Avaliacoes() {
       toast({
         title: "Avaliação gerada",
         description: usedFallback
-          ? `${createdCount} questão(ões) criadas em modo local. ${reason || "Configure OPENAI_API_KEY no backend para geração real por IA."}`
+          ? `${createdCount} questão(ões) criadas em modo local. ${reason || "Verifique a conexão com o provedor de IA configurado (OLLAMA_BASE_URL/OLLAMA_MODEL ou OPENAI_API_KEY)."}`
           : `${createdCount} questão(ões) geradas por IA e vinculadas à avaliação.`
       });
     },
@@ -277,67 +312,187 @@ export default function Avaliacoes() {
     setForm({ ...form, questoes_ids: ids });
   };
 
+  const resetFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setTurmaFilter("all");
+    setDisciplinaFilter("all");
+    setSortBy("data_desc");
+  };
+
+  const openDeleteDialog = (assessment) => {
+    setDeleteTarget(assessment);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteAssessment = () => {
+    if (!deleteTarget) return;
+    remove.mutate({ id: deleteTarget.id, title: deleteTarget.titulo });
+  };
+
   const getTurmaName = (id) => turmas.find(t => t.id === id)?.nome || "—";
   const getDisciplinaName = (id) => disciplinas.find(d => d.id === id)?.nome || "—";
+  const getDateValue = (dateValue) => {
+    if (!dateValue) return null;
+    const parsedDate = typeof dateValue === "string" ? parseISO(dateValue) : new Date(dateValue);
+    return isValid(parsedDate) ? parsedDate.getTime() : null;
+  };
+  const formatApplicationDate = (dateValue) => {
+    if (!dateValue) return "";
+    const parsedDate = typeof dateValue === "string" ? parseISO(dateValue) : new Date(dateValue);
+    return isValid(parsedDate) ? format(parsedDate, "dd/MM/yyyy") : "";
+  };
 
   const filteredDisc = form.disciplina_id ? questoes.filter(q => q.disciplina_id === form.disciplina_id) : questoes;
-  const filtered = avaliacoes.filter(a => a.titulo?.toLowerCase().includes(search.toLowerCase()));
+  const searchTerm = search.trim().toLowerCase();
+  const filtered = avaliacoes
+    .filter((a) => {
+      const matchesSearch = !searchTerm
+        || a.titulo?.toLowerCase().includes(searchTerm)
+        || getDisciplinaName(a.disciplina_id).toLowerCase().includes(searchTerm)
+        || getTurmaName(a.turma_id).toLowerCase().includes(searchTerm);
+      const matchesStatus = statusFilter === "all" || a.status === statusFilter;
+      const matchesTurma = turmaFilter === "all" || a.turma_id === turmaFilter;
+      const matchesDisciplina = disciplinaFilter === "all" || a.disciplina_id === disciplinaFilter;
+      return matchesSearch && matchesStatus && matchesTurma && matchesDisciplina;
+    })
+    .sort((a, b) => {
+      if (sortBy === "titulo_asc") return (a.titulo || "").localeCompare(b.titulo || "", "pt-BR");
+      if (sortBy === "titulo_desc") return (b.titulo || "").localeCompare(a.titulo || "", "pt-BR");
+      if (sortBy === "questoes_desc") return (b.questoes_ids?.length || 0) - (a.questoes_ids?.length || 0);
+      if (sortBy === "questoes_asc") return (a.questoes_ids?.length || 0) - (b.questoes_ids?.length || 0);
+
+      const aDate = getDateValue(a.data_aplicacao);
+      const bDate = getDateValue(b.data_aplicacao);
+      if (aDate === null && bDate === null) return 0;
+      if (aDate === null) return 1;
+      if (bDate === null) return -1;
+      return sortBy === "data_asc" ? aDate - bDate : bDate - aDate;
+    });
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <PageHeader title="Avaliações" description="Crie e gerencie suas provas" action={() => setDialogOpen(true)} actionLabel="Nova Avaliação" actionIcon={Plus} />
 
-      <div className="relative mb-6">
+      <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Buscar avaliações..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+        <Input placeholder="Buscar por título, turma ou disciplina..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
       </div>
 
-      <div className="mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {Object.entries(STATUS_MAP).map(([status, config]) => (
+                <SelectItem key={status} value={status}>{config.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Turma</Label>
+          <Select value={turmaFilter} onValueChange={setTurmaFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              {turmas.map((turma) => (
+                <SelectItem key={turma.id} value={turma.id}>{turma.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Disciplina</Label>
+          <Select value={disciplinaFilter} onValueChange={setDisciplinaFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              {disciplinas.map((disciplina) => (
+                <SelectItem key={disciplina.id} value={disciplina.id}>{disciplina.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Ordenar por</Label>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="data_desc">Data (mais recente)</SelectItem>
+              <SelectItem value="data_asc">Data (mais antiga)</SelectItem>
+              <SelectItem value="titulo_asc">Título (A-Z)</SelectItem>
+              <SelectItem value="titulo_desc">Título (Z-A)</SelectItem>
+              <SelectItem value="questoes_desc">Mais questões</SelectItem>
+              <SelectItem value="questoes_asc">Menos questões</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
         <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setAiDialogOpen(true)}>
           <Sparkles className="w-4 h-4 mr-2" />
           Gerar Avaliação com IA
         </Button>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={resetFilters} disabled={!hasActiveFilters}>
+          Limpar filtros
+        </Button>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={ClipboardCheck} title="Nenhuma avaliação" description="Crie sua primeira avaliação." actionLabel="Criar Avaliação" onAction={() => setDialogOpen(true)} />
+        <EmptyState
+          icon={ClipboardCheck}
+          title="Nenhuma avaliação"
+          description={hasActiveFilters ? "Nenhum resultado com os filtros aplicados." : "Crie sua primeira avaliação."}
+          actionLabel={hasActiveFilters ? "Limpar filtros" : "Criar Avaliação"}
+          onAction={hasActiveFilters ? resetFilters : () => setDialogOpen(true)}
+        />
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(a => (
-            <Card key={a.id} className="hover:shadow-lg transition-shadow duration-300 group">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-primary" />
+          {filtered.map((a) => {
+            const applicationDate = formatApplicationDate(a.data_aplicacao);
+
+            return (
+              <Card key={a.id} className="hover:shadow-lg transition-shadow duration-300 group">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">{a.titulo}</h3>
+                        <p className="text-xs text-muted-foreground">{getDisciplinaName(a.disciplina_id)}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">{a.titulo}</h3>
-                      <p className="text-xs text-muted-foreground">{getDisciplinaName(a.disciplina_id)}</p>
+                    <Badge className={`text-xs ${STATUS_MAP[a.status]?.class || ""}`}>{STATUS_MAP[a.status]?.label || a.status}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="flex gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-xs">{getTurmaName(a.turma_id)}</Badge>
+                      <Badge variant="outline" className="text-xs">{a.questoes_ids?.length || 0} questões</Badge>
+                      {applicationDate && (
+                        <Badge variant="outline" className="text-xs">{applicationDate}</Badge>
+                      )}
+                    </div>
+                    <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openSyncDialog(a)}>
+                        <Share2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPdfDialog(a)}>
+                        <Download className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => openDeleteDialog(a)}><Trash2 className="w-3.5 h-3.5" /></Button>
                     </div>
                   </div>
-                  <Badge className={`text-xs ${STATUS_MAP[a.status]?.class || ""}`}>{STATUS_MAP[a.status]?.label || a.status}</Badge>
-                </div>
-                <div className="flex items-center justify-between mt-4">
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge variant="outline" className="text-xs">{getTurmaName(a.turma_id)}</Badge>
-                    <Badge variant="outline" className="text-xs">{a.questoes_ids?.length || 0} questões</Badge>
-                    {a.data_aplicacao && <Badge variant="outline" className="text-xs">{format(new Date(a.data_aplicacao), "dd/MM/yyyy")}</Badge>}
-                  </div>
-                  <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openSyncDialog(a)}>
-                      <Share2 className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPdfDialog(a)}>
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -620,6 +775,31 @@ export default function Avaliacoes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deleteDialogOpen}
+        onOpenChange={(isOpen) => {
+          setDeleteDialogOpen(isOpen);
+          if (!isOpen && !remove.isPending) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir avaliação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `A avaliação "${deleteTarget.titulo}" será removida permanentemente.`
+                : "Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={remove.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteAssessment} disabled={remove.isPending}>
+              {remove.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

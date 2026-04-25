@@ -166,10 +166,13 @@ export const initDatabase = async () => {
     await runMigrations(queryExecutor);
     await seedDefaultUsers(queryExecutor);
     databaseMode = "postgres";
-    console.log("[backend] Banco conectado em modo postgres.");
+    console.log("[backend] Banco conectado em modo postgres (persistente).");
     return;
   } catch (error) {
     if (!env.allowDbFallback) {
+      console.error("[backend] Falha ao conectar no PostgreSQL e fallback em memória está desativado.", {
+        message: error?.message || "erro desconhecido",
+      });
       throw error;
     }
 
@@ -178,7 +181,12 @@ export const initDatabase = async () => {
     await runMigrations(queryExecutor);
     await seedDefaultUsers(queryExecutor);
     databaseMode = "memory";
-    console.warn("[backend] PostgreSQL indisponível. Rodando em fallback de memória.");
+    console.warn(
+      "[backend] PostgreSQL indisponível. Rodando em fallback de memória (NÃO PERSISTE DADOS APÓS REINÍCIO).",
+      {
+        message: error?.message || "erro desconhecido",
+      }
+    );
   }
 };
 

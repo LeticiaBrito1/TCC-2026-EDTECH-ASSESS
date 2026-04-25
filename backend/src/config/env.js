@@ -6,7 +6,7 @@ export const env = {
     .filter(Boolean),
   databaseUrl: String(process.env.DATABASE_URL || "").trim(),
   pgSsl: String(process.env.PGSSL || "false").toLowerCase() === "true",
-  allowDbFallback: String(process.env.ALLOW_DB_FALLBACK || "true").toLowerCase() === "true",
+  allowDbFallback: String(process.env.ALLOW_DB_FALLBACK || "false").toLowerCase() === "true",
   aiProvider: String(process.env.AI_PROVIDER || "ollama").trim().toLowerCase(),
   openAiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
   hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
