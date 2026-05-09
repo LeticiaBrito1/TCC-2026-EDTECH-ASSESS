@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings, setAppPublicSettings] = useState(null);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
 
   useEffect(() => {
     checkAppState();
@@ -44,10 +45,40 @@ export const AuthProvider = ({ children }) => {
     appClient.auth.logout?.();
     setUser(null);
     setIsAuthenticated(false);
+    setAuthError({
+      type: "auth_required",
+      message: "Autenticação obrigatória",
+    });
+  };
+
+  const login = async (email, password) => {
+    setIsSubmittingLogin(true);
+    setAuthError(null);
+
+    try {
+      const currentUser = await appClient.auth.login(email, password);
+      setUser(currentUser);
+      setIsAuthenticated(Boolean(currentUser));
+      return currentUser;
+    } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError({
+        type: "login_failed",
+        message: error?.message || "Falha ao autenticar.",
+      });
+      throw error;
+    } finally {
+      setIsSubmittingLogin(false);
+    }
   };
 
   const navigateToLogin = () => {
     appClient.auth.redirectToLogin?.(window.location.href);
+    setAuthError({
+      type: "auth_required",
+      message: "Autenticação obrigatória",
+    });
   };
 
   return (
@@ -59,6 +90,8 @@ export const AuthProvider = ({ children }) => {
         isLoadingPublicSettings,
         authError,
         appPublicSettings,
+        isSubmittingLogin,
+        login,
         logout,
         navigateToLogin,
         checkAppState,

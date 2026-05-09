@@ -50,7 +50,7 @@ Depois:
 
 ## Fluxo no app
 
-1. Login com usuário do backend (`professor@edtech.local` / `123456`)
+1. Login com um usuário válido do backend
 2. Ler QR da prova (preenche `avaliacao_id` e `aluno_id`)
 3. Tirar foto ou escolher da galeria
 4. Tocar em `Corrigir Prova`
@@ -58,3 +58,5 @@ Depois:
 ## Observação
 
 Permissões de câmera/galeria são solicitadas pelo app na primeira utilização.
+
+Se você estiver usando a configuração padrão do backend em desenvolvimento, os usuários seedados ficam definidos em `backend/.env`.

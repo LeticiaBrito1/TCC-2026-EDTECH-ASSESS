@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { appClient } from "@/api/appClient";
+import { useAuth } from "@/lib/AuthContext";
 import {
   LayoutDashboard,
   Users,
@@ -38,19 +39,23 @@ const navItems = [
 ];
 
 export default function Layout({ children, currentPageName }) {
+  const { user: authUser, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
-    appClient.auth.me().then((currentUser) => {
-      setUser(currentUser);
-      loadNotifications();
-    }).catch(() => {});
+    setUser(authUser || null);
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser) return undefined;
+
+    loadNotifications();
     const intervalId = window.setInterval(loadNotifications, 30000);
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [authUser]);
 
   const loadNotifications = async () => {
     try {
@@ -97,11 +102,12 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Sidebar */}
       <aside className={`
-        fixed lg:sticky top-0 left-0 z-50 h-screen w-72
-        flex flex-col transition-transform duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-50 w-72
+        flex flex-col overflow-hidden transition-transform duration-300 ease-in-out
+        lg:sticky lg:top-0 lg:h-screen
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `} style={{ background: "hsl(218, 75%, 18%)" }}>
-        <div className="p-6 border-b" style={{ borderColor: "hsl(218, 75%, 26%)" }}>
+        <div className="shrink-0 border-b p-6" style={{ borderColor: "hsl(218, 75%, 26%)" }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "hsl(206, 72%, 55%)" }}>
               <ScanLine className="w-5 h-5 text-white" />
@@ -113,7 +119,7 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-4">
           {navItems.map((item) => {
             const isActive = currentPageName === item.page;
             return (
@@ -145,7 +151,7 @@ export default function Layout({ children, currentPageName }) {
 
         {/* User footer */}
         {user && (
-          <div className="p-4 border-t" style={{ borderColor: "hsl(218, 75%, 26%)" }}>
+          <div className="shrink-0 border-t p-4" style={{ borderColor: "hsl(218, 75%, 26%)" }}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center justify-between w-full px-3 py-2 mb-2 rounded-xl transition-colors"
@@ -213,7 +219,7 @@ export default function Layout({ children, currentPageName }) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => appClient.auth.logout()}>
+                <DropdownMenuItem onClick={logout}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair
                 </DropdownMenuItem>

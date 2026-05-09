@@ -57,3 +57,9 @@ export const apiCorrectByOcr = (token, payload) =>
     token,
     body: payload,
   });
+
+export const apiListEntities = (token, entity) =>
+  request(`/api/entities/${entity}`, {
+    method: "GET",
+    token,
+  });
