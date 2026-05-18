@@ -44,9 +44,7 @@ const normalizeAlternativas = (alternativas = [], randomAlternatives = false, ra
     }))
     .filter((item) => item.texto);
 
-  if (!randomAlternatives || !random) {
-    return list;
-  }
+  if (!randomAlternatives || !random) return list;
 
   return shuffled(list, random).map((item, index) => ({
     letra: String.fromCharCode(65 + index),
@@ -55,33 +53,18 @@ const normalizeAlternativas = (alternativas = [], randomAlternatives = false, ra
   }));
 };
 
-const buildVersionQuestions = ({
-  questions,
-  versionSeed,
-  shuffleQuestions = false,
-  shuffleAlternatives = false,
-}) => {
+const buildVersionQuestions = ({ questions, versionSeed, shuffleQuestions = false, shuffleAlternatives = false }) => {
   const random = mulberry32(versionSeed);
   const sourceList = shuffleQuestions ? shuffled(questions, random) : [...questions];
 
   return sourceList.map((question) => {
-    const alternatives = normalizeAlternativas(
-      question.alternativas,
-      shuffleAlternatives,
-      random
-    );
-
+    const alternatives = normalizeAlternativas(question.alternativas, shuffleAlternatives, random);
     let gabarito = String(question.gabarito || "A").toUpperCase();
     if (shuffleAlternatives) {
       const found = alternatives.find((alt) => alt.originalLetra === gabarito);
       gabarito = found?.letra || alternatives[0]?.letra || "A";
     }
-
-    return {
-      ...question,
-      alternativas: alternatives,
-      gabarito,
-    };
+    return { ...question, alternativas: alternatives, gabarito };
   });
 };
 
@@ -91,43 +74,94 @@ const versionLabelFromIndex = (index) => {
   return `V${index + 1}`;
 };
 
-const drawHeader = async ({
-  doc,
-  assessment,
-  disciplinaNome,
-  turmaNome,
-  aluno,
-  versionLabel,
-  qrPayload,
-}) => {
+const drawCoverPage = async ({ doc, assessment, disciplinaNome, turmaNome, aluno, versionLabel, qrPayload, versionQuestions }) => {
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = PAGE.margin;
-  let cursorY = margin;
+  let y = margin;
 
+  // Title
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  doc.text(assessment.titulo || "Avaliação", margin, cursorY);
-  cursorY += 7;
+  doc.setFontSize(16);
+  doc.text(assessment.titulo || "Avaliação", margin, y);
+  y += 9;
 
+  // Info block
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(`Disciplina: ${disciplinaNome || "—"}`, margin, cursorY);
-  cursorY += 5;
-  doc.text(`Turma: ${turmaNome || "—"}`, margin, cursorY);
-  cursorY += 5;
-  doc.text(`Aluno: ${aluno?.nome || "NÃO IDENTIFICADO"}`, margin, cursorY);
-  cursorY += 5;
-  doc.text(`Versão: ${versionLabel}`, margin, cursorY);
-  cursorY += 5;
-  doc.text(`Data de aplicação: ${assessment.data_aplicacao || "—"}`, margin, cursorY);
 
-  const qrDataUrl = await QRCode.toDataURL(qrPayload, { margin: 1, width: 140 });
-  doc.addImage(qrDataUrl, "PNG", pageWidth - margin - 32, margin, 32, 32);
+  const infoLines = [
+    ["Disciplina:", disciplinaNome || "—"],
+    ["Turma:", turmaNome || "—"],
+    ["Aluno:", aluno?.nome || "____________________________________"],
+    ["Versão:", versionLabel],
+    ["Data de aplicação:", assessment.data_aplicacao || "____/____/________"],
+  ];
 
-  return Math.max(cursorY + 4, margin + 36);
+  infoLines.forEach(([label, value]) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(label, margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(value, margin + 35, y);
+    y += 6;
+  });
+
+  // QR Code (large, right side)
+  const qrSize = 40;
+  const qrDataUrl = await QRCode.toDataURL(qrPayload, { margin: 1, width: 300 });
+  doc.addImage(qrDataUrl, "PNG", pageWidth - margin - qrSize, margin, qrSize, qrSize);
+
+  y += 6;
+
+  // Separator line
+  doc.setDrawColor(180);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 8;
+
+  // Answer grid for student
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("Folha de Respostas", margin, y);
+  y += 7;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+
+  const letters = versionQuestions.length > 0
+    ? [...new Set(versionQuestions.flatMap(q => (q.alternativas || []).map(a => a.letra)))].sort()
+    : ["A", "B", "C", "D", "E"];
+
+  const cols = 3;
+  const colWidth = (pageWidth - margin * 2) / cols;
+  const circleR = 3.5;
+  const circleSpacing = 9;
+
+  versionQuestions.forEach((q, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = margin + col * colWidth;
+    const qy = y + row * 12;
+
+    if (qy + 12 > doc.internal.pageSize.getHeight() - margin) return;
+
+    doc.setFont("helvetica", "bold");
+    doc.text(`${idx + 1}.`, x, qy);
+
+    const alts = q.alternativas?.length > 0 ? q.alternativas.map(a => a.letra) : letters;
+    alts.forEach((letra, li) => {
+      const cx = x + 8 + li * circleSpacing;
+      doc.setDrawColor(80);
+      doc.circle(cx, qy - 2, circleR);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.text(letra, cx - 1.5, qy - 0.5);
+      doc.setFontSize(9);
+    });
+  });
+
+  return y + Math.ceil(versionQuestions.length / cols) * 12 + 4;
 };
 
-const drawQuestion = ({ doc, question, index, cursorY }) => {
+const drawQuestion = ({ doc, question, index, cursorY, peso }) => {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const maxWidth = pageWidth - PAGE.margin * 2;
@@ -141,7 +175,8 @@ const drawQuestion = ({ doc, question, index, cursorY }) => {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  const enunciado = `${index + 1}. ${String(question.enunciado || "").trim()}`;
+  const pesoStr = peso != null ? ` (${Number(peso)} pt${Number(peso) !== 1 ? "s" : ""})` : "";
+  const enunciado = `${index + 1}.${pesoStr} ${String(question.enunciado || "").trim()}`;
   const qLines = doc.splitTextToSize(enunciado, maxWidth);
   ensureSpace(qLines.length * PAGE.lineHeight + 8);
   doc.text(qLines, PAGE.margin, y);
@@ -174,7 +209,7 @@ const drawAnswerKeyPage = ({ doc, assessment, versionLabel, versionQuestions }) 
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  doc.text(`${assessment.titulo || "Avaliação"} - Versão ${versionLabel}`, margin, y);
+  doc.text(`${assessment.titulo || "Avaliação"} — Versão ${versionLabel}`, margin, y);
   y += 8;
 
   const entries = versionQuestions.map((q, idx) => `${idx + 1}: ${q.gabarito || "—"}`);
@@ -196,11 +231,12 @@ export const generateAssessmentPdf = async ({
   disciplinaNome = "",
   turmaNome = "",
   versionsCount = 1,
-  includeAnswerKey = true,
+  includeAnswerKey = false,
 }) => {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const safeVersions = Math.max(1, Math.min(10, Number(versionsCount) || 1));
   const students = alunos.length > 0 ? alunos : [null];
+  const questoesPesos = assessment.questoes_pesos || {};
 
   let firstPage = true;
 
@@ -215,9 +251,7 @@ export const generateAssessmentPdf = async ({
     });
 
     for (const aluno of students) {
-      if (!firstPage) {
-        doc.addPage();
-      }
+      if (!firstPage) doc.addPage();
       firstPage = false;
 
       const qrPayload = JSON.stringify({
@@ -226,7 +260,8 @@ export const generateAssessmentPdf = async ({
         versao: versionLabel,
       });
 
-      let y = await drawHeader({
+      // Cover page (with QR code + answer grid)
+      await drawCoverPage({
         doc,
         assessment,
         disciplinaNome,
@@ -234,10 +269,26 @@ export const generateAssessmentPdf = async ({
         aluno,
         versionLabel,
         qrPayload,
+        versionQuestions,
       });
 
+      // Questions page(s)
+      doc.addPage();
+      let y = PAGE.margin;
+
+      // Compact header on question pages
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`${assessment.titulo || "Avaliação"} — Versão ${versionLabel} — ${aluno?.nome || ""}`, PAGE.margin, y);
+      y += 7;
+      doc.setDrawColor(200);
+      doc.line(PAGE.margin, y, doc.internal.pageSize.getWidth() - PAGE.margin, y);
+      y += 5;
+
       for (let qIndex = 0; qIndex < versionQuestions.length; qIndex += 1) {
-        y = drawQuestion({ doc, question: versionQuestions[qIndex], index: qIndex, cursorY: y });
+        const q = versionQuestions[qIndex];
+        const peso = questoesPesos[q.id] != null ? questoesPesos[q.id] : null;
+        y = drawQuestion({ doc, question: q, index: qIndex, cursorY: y, peso });
       }
     }
 
@@ -248,12 +299,11 @@ export const generateAssessmentPdf = async ({
 
   const safeTitle = String(assessment.titulo || "avaliacao")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-zA-Z0-9-_]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
 
-  const filename = `${safeTitle || "avaliacao"}_versoes.pdf`;
-  doc.save(filename);
+  doc.save(`${safeTitle || "avaliacao"}_versoes.pdf`);
 };

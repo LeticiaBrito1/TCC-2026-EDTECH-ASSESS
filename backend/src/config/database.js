@@ -42,10 +42,26 @@ const runMigrations = async (query) => {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('admin', 'professor')),
       active BOOLEAN NOT NULL DEFAULT TRUE,
+      token_version INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  // Migração incremental: adiciona token_version em bancos já existentes
+  await query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  // Migração incremental: verificação de e-mail
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS verification_token TEXT;`);
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMPTZ;`);
+
+  // Migração incremental: código de login 2FA
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS login_code TEXT;`);
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS login_code_expires TIMESTAMPTZ;`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS app_audit_logs (
@@ -93,14 +109,15 @@ const ensureUser = async (query, { fullName, email, password, role }) => {
   const id = randomUUID();
   const { rows } = await query(
     `
-      INSERT INTO app_users (id, full_name, email, password_hash, role, active)
-      VALUES ($1, $2, $3, $4, $5, TRUE)
+      INSERT INTO app_users (id, full_name, email, password_hash, role, active, email_verified)
+      VALUES ($1, $2, $3, $4, $5, TRUE, TRUE)
       ON CONFLICT (email)
       DO UPDATE SET
         full_name = EXCLUDED.full_name,
         password_hash = EXCLUDED.password_hash,
         role = EXCLUDED.role,
         active = TRUE,
+        email_verified = TRUE,
         updated_at = NOW()
       RETURNING id
     `,

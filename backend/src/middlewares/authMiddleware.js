@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
+import { findUserByIdWithVersion } from "../models/authModel.js";
 import { HttpError } from "../utils/httpError.js";
 
 const parseBearerToken = (headerValue) => {
@@ -10,15 +11,35 @@ const parseBearerToken = (headerValue) => {
   return token.trim();
 };
 
-export const authenticate = (req, _res, next) => {
+export const authenticate = async (req, _res, next) => {
   const token = parseBearerToken(req.headers.authorization);
   if (!token) {
     next(new HttpError(401, "Token de acesso ausente."));
     return;
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, env.jwtSecret);
+    decoded = jwt.verify(token, env.jwtSecret);
+  } catch {
+    next(new HttpError(401, "Token inválido ou expirado."));
+    return;
+  }
+
+  try {
+    // Verifica se o token foi invalidado por troca de senha
+    const dbUser = await findUserByIdWithVersion(decoded.sub);
+    if (!dbUser || !dbUser.active) {
+      next(new HttpError(401, "Sessão inválida."));
+      return;
+    }
+
+    const tokenVersion = decoded.tv ?? 0;
+    if (tokenVersion !== dbUser.token_version) {
+      next(new HttpError(401, "Sessão expirada. Faça login novamente."));
+      return;
+    }
+
     req.user = {
       id: decoded.sub,
       email: decoded.email,
@@ -26,7 +47,7 @@ export const authenticate = (req, _res, next) => {
     };
     next();
   } catch {
-    next(new HttpError(401, "Token inválido ou expirado."));
+    next(new HttpError(500, "Erro ao validar sessão."));
   }
 };
 
@@ -36,6 +57,5 @@ export const requireRoles = (...allowedRoles) => (req, _res, next) => {
     next(new HttpError(403, "Você não tem permissão para esta ação."));
     return;
   }
-
   next();
 };

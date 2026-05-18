@@ -122,7 +122,15 @@ export default function Correcao() {
     const totalAcertos = respostasArray.filter(r => r.correta).length;
     const totalQuestoes = questoesAvaliacao.length;
     const percentual = totalQuestoes > 0 ? Math.round((totalAcertos / totalQuestoes) * 100) : 0;
-    const nota = totalQuestoes > 0 ? ((totalAcertos / totalQuestoes) * (avaliacao.total_pontos || 10)) : 0;
+    const pesos = avaliacao.questoes_pesos || {};
+    const temPesos = Object.keys(pesos).length > 0;
+    const nota = temPesos
+      ? respostasArray.reduce((sum, r) => {
+          if (!r.correta) return sum;
+          const peso = pesos[r.questao_id];
+          return sum + (peso != null ? Number(peso) : (avaliacao.total_pontos || 10) / totalQuestoes);
+        }, 0)
+      : totalQuestoes > 0 ? ((totalAcertos / totalQuestoes) * (avaliacao.total_pontos || 10)) : 0;
 
     const resultado = {
       avaliacao_id: selectedAvaliacao,

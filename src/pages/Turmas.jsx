@@ -99,7 +99,16 @@ export default function Turmas() {
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: 3º Ano A" /></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Ano Letivo *</Label><Input value={form.ano_letivo} onChange={e => setForm({ ...form, ano_letivo: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Ano Letivo *</Label>
+                <Select value={form.ano_letivo} onValueChange={v => setForm({ ...form, ano_letivo: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["2020","2021","2022","2023","2024","2025","2026","2027","2028","2029","2030"].map(y => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2"><Label>Período</Label>
                 <Select value={form.periodo} onValueChange={v => setForm({ ...form, periodo: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

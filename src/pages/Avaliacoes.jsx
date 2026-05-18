@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2, Download, Share2 } from "lucide-react";
+import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2, Download, Share2, Paperclip, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +62,7 @@ export default function Avaliacoes() {
   const [editing, setEditing] = useState(null);
   const [pdfTarget, setPdfTarget] = useState(null);
   const [pdfVersions, setPdfVersions] = useState(1);
-  const [pdfIncludeAnswerKey, setPdfIncludeAnswerKey] = useState(true);
+  const [pdfIncludeAnswerKey, setPdfIncludeAnswerKey] = useState(false);
   const [pdfIncludeStudents, setPdfIncludeStudents] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
@@ -78,9 +78,10 @@ export default function Avaliacoes() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [aiForm, setAiForm] = useState(emptyAiForm);
+  const [materialNome, setMaterialNome] = useState("");
   const [form, setForm] = useState({
     titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho",
-    questoes_ids: [], total_pontos: 10, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: ""
+    questoes_ids: [], total_pontos: 10, questoes_pesos: {}, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: ""
   });
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -146,7 +147,7 @@ export default function Avaliacoes() {
         data_aplicacao: aiForm.data_aplicacao || "",
         status: aiForm.status || "rascunho",
         questoes_ids: createdQuestions.map((question) => question.id),
-        total_pontos: Number(aiForm.total_pontos) || 10,
+        total_pontos: Math.min(100, Math.max(0, Math.round((Number(aiForm.total_pontos) || 10) * 100) / 100)),
         embaralhar_questoes: Boolean(aiForm.embaralhar_questoes),
         embaralhar_alternativas: Boolean(aiForm.embaralhar_alternativas),
         instrucoes: aiForm.instrucoes || ""
@@ -181,12 +182,50 @@ export default function Avaliacoes() {
 
   const closeDialog = () => {
     setDialogOpen(false); setEditing(null);
-    setForm({ titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho", questoes_ids: [], total_pontos: 10, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: "" });
+    setForm({ titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho", questoes_ids: [], total_pontos: 10, questoes_pesos: {}, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: "" });
   };
 
   const closeAiDialog = () => {
     setAiDialogOpen(false);
     setAiForm(emptyAiForm);
+    setMaterialNome("");
+  };
+
+  const readFileAsText = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result || "");
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+      reader.readAsText(file, "utf-8");
+    });
+
+  const handleMaterialFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const allowedTypes = ["text/plain", "text/markdown", "text/csv", "application/csv", "text/x-csv"];
+    const isText = allowedTypes.includes(file.type) || /\.(txt|md|csv)$/i.test(file.name);
+    if (!isText) {
+      toast({
+        title: "Tipo de arquivo não suportado",
+        description: "Selecione arquivos .txt, .md ou .csv. Para PDFs, copie e cole o texto no campo Contexto.",
+        variant: "destructive"
+      });
+      return;
+    }
+    try {
+      const text = await readFileAsText(file);
+      const truncated = text.slice(0, 4000);
+      setAiForm(prev => ({
+        ...prev,
+        contexto: prev.contexto
+          ? `${prev.contexto}\n\n--- ${file.name} ---\n${truncated}`
+          : `--- ${file.name} ---\n${truncated}`
+      }));
+      setMaterialNome(file.name);
+    } catch {
+      toast({ title: "Erro ao ler arquivo", description: "Não foi possível ler o arquivo selecionado.", variant: "destructive" });
+    }
   };
 
   const closePdfDialog = () => {
@@ -296,6 +335,7 @@ export default function Avaliacoes() {
       titulo: a.titulo, disciplina_id: a.disciplina_id || "", turma_id: a.turma_id || "",
       data_aplicacao: a.data_aplicacao || "", status: a.status || "rascunho",
       questoes_ids: a.questoes_ids || [], total_pontos: a.total_pontos || 10,
+      questoes_pesos: a.questoes_pesos || {},
       embaralhar_questoes: a.embaralhar_questoes || false, embaralhar_alternativas: a.embaralhar_alternativas || false,
       instrucoes: a.instrucoes || ""
     });
@@ -303,13 +343,30 @@ export default function Avaliacoes() {
   };
 
   const handleSubmit = () => {
-    if (!form.titulo || !form.disciplina_id || !form.turma_id) return;
-    editing ? update.mutate({ id: editing.id, d: form }) : create.mutate(form);
+    if (!form.titulo) return;
+    const pontos = Math.min(100, Math.max(0, Math.round(Number(form.total_pontos) * 100) / 100));
+    editing ? update.mutate({ id: editing.id, d: { ...form, total_pontos: pontos } }) : create.mutate({ ...form, total_pontos: pontos });
   };
 
   const toggleQuestao = (qid) => {
-    const ids = form.questoes_ids.includes(qid) ? form.questoes_ids.filter(id => id !== qid) : [...form.questoes_ids, qid];
-    setForm({ ...form, questoes_ids: ids });
+    const isSelected = form.questoes_ids.includes(qid);
+    const ids = isSelected ? form.questoes_ids.filter(id => id !== qid) : [...form.questoes_ids, qid];
+    const pesos = { ...form.questoes_pesos };
+    if (isSelected) delete pesos[qid];
+    setForm({ ...form, questoes_ids: ids, questoes_pesos: pesos });
+  };
+
+  const setPeso = (qid, valor) => {
+    setForm({ ...form, questoes_pesos: { ...form.questoes_pesos, [qid]: valor } });
+  };
+
+  const distribuirPontosIgual = () => {
+    const n = form.questoes_ids.length;
+    if (n === 0) return;
+    const valorPorQuestao = Math.round((Number(form.total_pontos) / n) * 100) / 100;
+    const pesos = {};
+    form.questoes_ids.forEach(id => { pesos[id] = valorPorQuestao; });
+    setForm({ ...form, questoes_pesos: pesos });
   };
 
   const resetFilters = () => {
@@ -502,41 +559,66 @@ export default function Avaliacoes() {
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Título *</Label><Input value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} placeholder="Ex: Prova 1 - Matemática" /></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Turma *</Label>
+              <div className="space-y-2"><Label>Turma</Label>
                 <Select value={form.turma_id} onValueChange={v => setForm({ ...form, turma_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
                   <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label>Disciplina *</Label>
+              <div className="space-y-2"><Label>Disciplina</Label>
                 <Select value={form.disciplina_id} onValueChange={v => setForm({ ...form, disciplina_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
                   <SelectContent>{disciplinas.map(d => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Data de Aplicação</Label><Input type="date" value={form.data_aplicacao} onChange={e => setForm({ ...form, data_aplicacao: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Total de Pontos</Label><Input type="number" value={form.total_pontos} onChange={e => setForm({ ...form, total_pontos: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><Label>Data de Aplicação</Label><Input type="date" lang="pt-BR" value={form.data_aplicacao} onChange={e => setForm({ ...form, data_aplicacao: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Total de Pontos (máx. 100)</Label><Input type="number" step="0.01" min={0} max={100} value={form.total_pontos} onChange={e => setForm({ ...form, total_pontos: e.target.value })} /></div>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               <div className="flex items-center gap-2"><Switch checked={form.embaralhar_questoes} onCheckedChange={v => setForm({ ...form, embaralhar_questoes: v })} /><Label>Embaralhar questões</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.embaralhar_alternativas} onCheckedChange={v => setForm({ ...form, embaralhar_alternativas: v })} /><Label>Embaralhar alternativas</Label></div>
             </div>
-            <div className="space-y-2"><Label>Instruções</Label><Textarea value={form.instrucoes} onChange={e => setForm({ ...form, instrucoes: e.target.value })} rows={2} /></div>
+            <div className="space-y-2"><Label>Instruções</Label><Textarea spellCheck value={form.instrucoes} onChange={e => setForm({ ...form, instrucoes: e.target.value })} rows={2} /></div>
 
             <div className="space-y-3">
-              <Label>Selecione as Questões ({form.questoes_ids.length} selecionadas)</Label>
-              <div className="max-h-48 overflow-y-auto space-y-2 border rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <Label>Selecione as Questões ({form.questoes_ids.length} selecionadas)</Label>
+                {form.questoes_ids.length > 0 && (
+                  <Button type="button" variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={distribuirPontosIgual}>
+                    Distribuir pts igualmente
+                  </Button>
+                )}
+              </div>
+              <div className="max-h-56 overflow-y-auto space-y-2 border rounded-lg p-3">
                 {filteredDisc.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Nenhuma questão disponível. Cadastre questões primeiro.</p>
                 ) : filteredDisc.map(q => (
-                  <label key={q.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer">
-                    <Checkbox checked={form.questoes_ids.includes(q.id)} onCheckedChange={() => toggleQuestao(q.id)} className="mt-0.5" />
-                    <span className="text-sm text-foreground line-clamp-2">{q.enunciado}</span>
-                  </label>
+                  <div key={q.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-accent">
+                    <Checkbox checked={form.questoes_ids.includes(q.id)} onCheckedChange={() => toggleQuestao(q.id)} className="mt-0.5 shrink-0" />
+                    <span className="text-sm text-foreground flex-1 line-clamp-2 cursor-pointer" onClick={() => toggleQuestao(q.id)}>{q.enunciado}</span>
+                    {form.questoes_ids.includes(q.id) && (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={100}
+                        className="w-20 h-7 text-xs shrink-0"
+                        placeholder="Pts"
+                        value={form.questoes_pesos[q.id] ?? ""}
+                        onChange={e => setPeso(q.id, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
+              {form.questoes_ids.length > 0 && Object.keys(form.questoes_pesos).length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Total atribuído: {Object.values(form.questoes_pesos).reduce((s, v) => s + (Number(v) || 0), 0).toFixed(2)} pts
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -620,12 +702,14 @@ export default function Avaliacoes() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Total de Pontos</Label>
+                <Label>Total de Pontos (máx. 100)</Label>
                 <Input
                   type="number"
-                  min={1}
+                  step="0.01"
+                  min={0}
+                  max={100}
                   value={aiForm.total_pontos}
-                  onChange={e => setAiForm({ ...aiForm, total_pontos: Number(e.target.value || 10) })}
+                  onChange={e => setAiForm({ ...aiForm, total_pontos: e.target.value })}
                 />
               </div>
             </div>
@@ -645,6 +729,7 @@ export default function Avaliacoes() {
                 <Label>Data de Aplicação</Label>
                 <Input
                   type="date"
+                  lang="pt-BR"
                   value={aiForm.data_aplicacao}
                   onChange={e => setAiForm({ ...aiForm, data_aplicacao: e.target.value })}
                 />
@@ -669,19 +754,42 @@ export default function Avaliacoes() {
             </div>
 
             <div className="space-y-2">
-              <Label>Contexto (opcional)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Contexto / Material Didático (opcional)</Label>
+                <div className="flex items-center gap-2">
+                  {materialNome && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Paperclip className="w-3 h-3" />{materialNome}
+                      <button type="button" onClick={() => setMaterialNome("")} className="ml-1 hover:text-destructive">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  <label className="cursor-pointer">
+                    <input type="file" accept=".txt,.md,.csv" className="hidden" onChange={handleMaterialFile} />
+                    <span className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <Paperclip className="w-3 h-3" />Anexar material
+                    </span>
+                  </label>
+                </div>
+              </div>
               <Textarea
                 rows={3}
+                spellCheck
                 value={aiForm.contexto}
                 onChange={e => setAiForm({ ...aiForm, contexto: e.target.value })}
                 placeholder="Informe o contexto da turma, objetivo da prova ou recorte do conteúdo."
               />
+              <p className="text-xs text-muted-foreground">
+                Aceita .txt, .md e .csv (até 4 000 caracteres). Para PDFs: abra o PDF e copie o texto relevante para este campo.
+              </p>
             </div>
 
             <div className="space-y-2">
               <Label>Instruções da Avaliação</Label>
               <Textarea
                 rows={2}
+                spellCheck
                 value={aiForm.instrucoes}
                 onChange={e => setAiForm({ ...aiForm, instrucoes: e.target.value })}
                 placeholder="Ex: não usar calculadora."

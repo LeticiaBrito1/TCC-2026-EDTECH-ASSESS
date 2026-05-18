@@ -2,15 +2,16 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { Suspense, useState } from "react";
+import { BrowserRouter as Router, Route, Routes, useSearchParams, useNavigate } from 'react-router-dom';
+import { Suspense, useState, useEffect } from "react";
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { ScanLine } from "lucide-react";
+import { ScanLine, Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -34,112 +35,425 @@ const RouteElement = ({ Page, currentPageName }) => (
   </LayoutWrapper>
 );
 
-const LoginScreen = () => {
-  const { login, isSubmittingLogin, authError } = useAuth();
+/* ─── Hero lateral (compartilhado entre Login e Cadastro) ─── */
+const AuthHero = () => (
+  <section className="rounded-[2rem] bg-slate-950 px-8 py-10 text-white shadow-2xl shadow-slate-950/20">
+    <div className="mb-10 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/20">
+      <ScanLine className="h-7 w-7 text-cyan-300" />
+    </div>
+    <p className="mb-4 text-xs font-bold uppercase tracking-[0.35em] text-cyan-300">EdTech Assess</p>
+    <h1 className="max-w-lg text-4xl font-black leading-tight sm:text-5xl">
+      Plataforma inteligente de avaliações educacionais.
+    </h1>
+    <p className="mt-5 max-w-xl text-base text-slate-300 sm:text-lg">
+      Gerencie turmas, crie avaliações com IA, corrija com OCR e acompanhe relatórios em tempo real.
+    </p>
+    <div className="mt-10 grid gap-4 sm:grid-cols-3">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <p className="text-sm font-semibold text-white">IA local com Ollama</p>
+        <p className="mt-2 text-sm text-slate-300">Gere questões automaticamente sem custo de API.</p>
+      </div>
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <p className="text-sm font-semibold text-white">Correção por OCR</p>
+        <p className="mt-2 text-sm text-slate-300">Digitalize gabaritos e corrija automaticamente.</p>
+      </div>
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <p className="text-sm font-semibold text-white">Web + mobile</p>
+        <p className="mt-2 text-sm text-slate-300">Mesmo backend para todos os clientes.</p>
+      </div>
+    </div>
+  </section>
+);
+
+const authPageWrapper = (children) => (
+  <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(14,116,110,0.16),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#e2e8f0_100%)]">
+    <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
+      <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <AuthHero />
+        {children}
+      </div>
+    </div>
+  </div>
+);
+
+/* ─── Tela de Login ─── */
+const LoginScreen = ({ onGoToRegister }) => {
+  const { login, isSubmittingLogin, authError, pendingVerificationEmail, clearPendingVerification } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resendStatus, setResendStatus] = useState(null); // null | "sending" | "sent"
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!email.trim() || !password) return;
+    try { await login(email.trim(), password); } catch { /* refletido no contexto */ }
+  };
 
+  const handleResend = async () => {
+    const target = pendingVerificationEmail || email;
+    if (!target) return;
+    setResendStatus("sending");
     try {
-      await login(email.trim(), password);
+      await appClient.auth.resendVerification(target);
+      setResendStatus("sent");
     } catch {
-      // O erro já é refletido no contexto.
+      setResendStatus(null);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(14,116,110,0.16),_transparent_38%),linear-gradient(135deg,_#f8fafc_0%,_#e2e8f0_100%)]">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-12">
-        <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <section className="rounded-[2rem] bg-slate-950 px-8 py-10 text-white shadow-2xl shadow-slate-950/20">
-            <div className="mb-10 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/20">
-              <ScanLine className="h-7 w-7 text-cyan-300" />
-            </div>
-            <p className="mb-4 text-xs font-bold uppercase tracking-[0.35em] text-cyan-300">EdTech Assess</p>
-            <h1 className="max-w-lg text-4xl font-black leading-tight sm:text-5xl">
-              Acesso real ao sistema de avaliações.
-            </h1>
-            <p className="mt-5 max-w-xl text-base text-slate-300 sm:text-lg">
-              Entre com um usuário persistido no backend para gerenciar turmas, avaliações, correções e relatórios.
-            </p>
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Autenticação real</p>
-                <p className="mt-2 text-sm text-slate-300">Sessão baseada em token e validação via `app_users`.</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Dados persistidos</p>
-                <p className="mt-2 text-sm text-slate-300">Tudo carregado do backend e do PostgreSQL.</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-sm font-semibold text-white">Web + mobile</p>
-                <p className="mt-2 text-sm text-slate-300">Mesmo backend de autenticação para os dois clientes.</p>
-              </div>
-            </div>
-          </section>
+  const isUnverified = authError?.type === "email_not_verified";
 
-          <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur">
-            <div className="mb-8">
-              <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">Login</p>
-              <h2 className="mt-3 text-3xl font-black text-slate-950">Entrar no painel web</h2>
-              <p className="mt-3 text-sm text-slate-600">
-                Use um email e senha válidos cadastrados no backend.
-              </p>
-            </div>
-
-            <form className="space-y-5" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <Label htmlFor="login-email">Email</Label>
-                <Input
-                  id="login-email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="voce@escola.com"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="login-password">Senha</Label>
-                <Input
-                  id="login-password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="Sua senha"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </div>
-
-              {authError?.type === "login_failed" ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                  {authError.message}
-                </div>
-              ) : null}
-
-              <Button
-                type="submit"
-                className="h-12 w-full rounded-2xl text-sm font-bold"
-                disabled={isSubmittingLogin || !email.trim() || !password}
-              >
-                {isSubmittingLogin ? "Entrando..." : "Entrar"}
-              </Button>
-            </form>
-          </section>
-        </div>
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur">
+      <div className="mb-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">Login</p>
+        <h2 className="mt-3 text-3xl font-black text-slate-950">Entrar no painel</h2>
+        <p className="mt-3 text-sm text-slate-600">Acesse com seu e-mail e senha cadastrados.</p>
       </div>
-    </div>
+
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <Label htmlFor="login-email">E-mail</Label>
+          <Input id="login-email" type="email" autoComplete="email"
+            placeholder="voce@escola.com" value={email}
+            onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="login-password">Senha</Label>
+          <Input id="login-password" type="password" autoComplete="current-password"
+            placeholder="Sua senha" value={password}
+            onChange={(e) => setPassword(e.target.value)} />
+        </div>
+
+        {authError?.type === "login_failed" && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {authError.message}
+          </div>
+        )}
+
+        {isUnverified && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <Mail className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">E-mail não confirmado</p>
+                <p className="text-sm text-amber-700 mt-0.5">
+                  Verifique sua caixa de entrada e clique no link de confirmação.
+                </p>
+              </div>
+            </div>
+            {resendStatus === "sent" ? (
+              <p className="text-xs text-teal-700 font-medium flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Novo link enviado! Verifique seu e-mail.
+              </p>
+            ) : (
+              <button type="button" onClick={handleResend} disabled={resendStatus === "sending"}
+                className="text-xs font-semibold text-amber-800 hover:underline flex items-center gap-1 disabled:opacity-50">
+                {resendStatus === "sending"
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Enviando...</>
+                  : <><RefreshCw className="h-3 w-3" /> Reenviar e-mail de confirmação</>}
+              </button>
+            )}
+          </div>
+        )}
+
+        <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
+          disabled={isSubmittingLogin || !email.trim() || !password}>
+          {isSubmittingLogin ? "Entrando..." : "Entrar"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-slate-500">
+        Ainda não tem conta?{" "}
+        <button type="button" onClick={onGoToRegister}
+          className="font-semibold text-teal-700 hover:underline">
+          Criar conta
+        </button>
+      </p>
+    </section>
   );
 };
 
-const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
+/* ─── Tela de Cadastro ─── */
+const RegisterScreen = ({ onGoToLogin }) => {
+  const { register, isSubmittingRegister, authError } = useAuth();
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm_password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState("");
 
-  // Show loading spinner while checking app public settings or auth
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLocalError("");
+    if (!form.full_name.trim() || !form.email.trim() || !form.password) {
+      setLocalError("Preencha todos os campos obrigatórios."); return;
+    }
+    if (form.full_name.trim().length < 2) {
+      setLocalError("Nome deve ter ao menos 2 caracteres."); return;
+    }
+    if (form.password.length < 8) {
+      setLocalError("A senha deve ter no mínimo 8 caracteres."); return;
+    }
+    if (!/[A-Za-z]/.test(form.password) || !/[0-9]/.test(form.password)) {
+      setLocalError("A senha deve conter letras e números."); return;
+    }
+    if (form.password !== form.confirm_password) {
+      setLocalError("As senhas não coincidem."); return;
+    }
+    try {
+      await register({ full_name: form.full_name.trim(), email: form.email.trim(), password: form.password });
+    } catch { /* refletido no contexto */ }
+  };
+
+  const errorMessage = localError || (authError?.type === "register_failed" ? authError.message : "");
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur">
+      <div className="mb-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">Cadastro</p>
+        <h2 className="mt-3 text-3xl font-black text-slate-950">Criar conta</h2>
+        <p className="mt-3 text-sm text-slate-600">
+          Preencha os dados abaixo. Você receberá um e-mail de confirmação.
+        </p>
+      </div>
+
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <Label htmlFor="reg-name">Nome completo *</Label>
+          <Input id="reg-name" type="text" autoComplete="name" placeholder="Seu nome completo"
+            value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="reg-email">E-mail *</Label>
+          <Input id="reg-email" type="email" autoComplete="email" placeholder="voce@escola.com"
+            value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="reg-password">Senha *</Label>
+          <div className="relative">
+            <Input id="reg-password" type={showPassword ? "text" : "password"}
+              autoComplete="new-password" placeholder="Mín. 8 caracteres, letras e números"
+              value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <button type="button" tabIndex={-1}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              onClick={() => setShowPassword(v => !v)}>
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="reg-confirm">Confirmar senha *</Label>
+          <Input id="reg-confirm" type="password" autoComplete="new-password"
+            placeholder="Repita a senha" value={form.confirm_password}
+            onChange={(e) => setForm({ ...form, confirm_password: e.target.value })} />
+        </div>
+
+        {errorMessage && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+          A conta será criada com perfil de <strong>professor</strong>. Permissões de administrador são concedidas manualmente.
+        </div>
+
+        <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
+          disabled={isSubmittingRegister}>
+          {isSubmittingRegister ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Criando conta...</> : "Criar conta"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-slate-500">
+        Já tem uma conta?{" "}
+        <button type="button" onClick={onGoToLogin}
+          className="font-semibold text-teal-700 hover:underline">Entrar</button>
+      </p>
+    </section>
+  );
+};
+
+/* ─── Tela de Código de Login 2FA ─── */
+const LoginCodeScreen = ({ onCancel }) => {
+  const { verifyLoginCode, cancelLoginCode, isSubmittingLoginCode, authError, pendingLoginEmail } = useAuth();
+  const [code, setCode] = useState("");
+
+  const handleCancel = () => {
+    cancelLoginCode();
+    onCancel?.();
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (code.length !== 6) return;
+    try { await verifyLoginCode(code); } catch { /* refletido no contexto */ }
+  };
+
+  const handleCodeChange = (e) => {
+    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+    setCode(val);
+  };
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-cyan-50">
+        <ShieldCheck className="h-10 w-10 text-cyan-600" />
+      </div>
+      <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Verificação</p>
+      <h2 className="text-3xl font-black text-slate-950 mb-3">Código de acesso</h2>
+      <p className="text-slate-600 text-sm leading-relaxed mb-1">
+        Enviamos um código de 6 dígitos para:
+      </p>
+      <p className="font-semibold text-slate-900 text-base mb-6">{pendingLoginEmail || "seu e-mail"}</p>
+
+      <form className="w-full space-y-4" onSubmit={handleSubmit}>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={code}
+          onChange={handleCodeChange}
+          placeholder="000000"
+          className="w-full text-center text-4xl font-black tracking-[0.5em] border-2 border-slate-200 rounded-2xl py-4 px-4 focus:outline-none focus:border-cyan-500 transition-colors"
+          autoFocus
+        />
+
+        {authError?.type === "login_code_failed" && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {authError.message}
+          </div>
+        )}
+
+        <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
+          disabled={isSubmittingLoginCode || code.length !== 6}>
+          {isSubmittingLoginCode
+            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Verificando...</>
+            : "Confirmar código"}
+        </Button>
+      </form>
+
+      <button type="button" onClick={handleCancel}
+        className="mt-4 text-sm text-slate-500 hover:text-slate-800 hover:underline py-2">
+        Voltar para o login
+      </button>
+    </section>
+  );
+};
+
+/* ─── Tela de Aguardando Verificação (após cadastro) ─── */
+const VerifyEmailPendingScreen = ({ onGoToLogin }) => {
+  const { pendingVerificationEmail } = useAuth();
+  const [resendStatus, setResendStatus] = useState(null);
+
+  const handleResend = async () => {
+    if (!pendingVerificationEmail) return;
+    setResendStatus("sending");
+    try {
+      await appClient.auth.resendVerification(pendingVerificationEmail);
+      setResendStatus("sent");
+    } catch {
+      setResendStatus(null);
+    }
+  };
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
+        <Mail className="h-10 w-10 text-teal-600" />
+      </div>
+      <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Quase lá!</p>
+      <h2 className="text-3xl font-black text-slate-950 mb-3">Confirme seu e-mail</h2>
+      <p className="text-slate-600 text-sm leading-relaxed mb-2">
+        Enviamos um link de confirmação para:
+      </p>
+      <p className="font-semibold text-slate-900 text-base mb-6">
+        {pendingVerificationEmail || "seu e-mail"}
+      </p>
+      <p className="text-slate-500 text-sm mb-8">
+        Clique no link recebido para ativar sua conta e fazer login. Verifique também a pasta de spam.
+      </p>
+
+      <div className="w-full space-y-3">
+        {resendStatus === "sent" ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-medium text-teal-800">
+            <CheckCircle2 className="h-4 w-4" /> Novo link enviado com sucesso!
+          </div>
+        ) : (
+          <Button variant="outline" className="w-full h-11 rounded-2xl text-sm"
+            onClick={handleResend} disabled={resendStatus === "sending"}>
+            {resendStatus === "sending"
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Reenviando...</>
+              : <><RefreshCw className="h-4 w-4 mr-2" />Reenviar e-mail de confirmação</>}
+          </Button>
+        )}
+
+        <button type="button" onClick={onGoToLogin}
+          className="w-full text-sm text-slate-500 hover:text-slate-800 hover:underline py-2">
+          Voltar para o login
+        </button>
+      </div>
+    </section>
+  );
+};
+
+/* ─── Tela de Verificação de Token (rota /verify-email?token=xxx) ─── */
+const VerifyEmailCallbackScreen = ({ onGoToLogin }) => {
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState("loading"); // loading | success | error
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    if (!token) { setStatus("error"); setMessage("Token de verificação ausente."); return; }
+
+    appClient.auth.verifyEmail(token)
+      .then((res) => { setStatus("success"); setMessage(res?.message || "E-mail confirmado!"); })
+      .catch((err) => { setStatus("error"); setMessage(err?.message || "Link inválido ou expirado."); });
+  }, []);
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      {status === "loading" && (
+        <>
+          <Loader2 className="h-16 w-16 text-teal-500 animate-spin mb-6" />
+          <h2 className="text-2xl font-black text-slate-950 mb-2">Verificando seu e-mail...</h2>
+          <p className="text-slate-500 text-sm">Aguarde um instante.</p>
+        </>
+      )}
+      {status === "success" && (
+        <>
+          <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
+            <CheckCircle2 className="h-10 w-10 text-teal-600" />
+          </div>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Confirmado!</p>
+          <h2 className="text-3xl font-black text-slate-950 mb-3">E-mail verificado</h2>
+          <p className="text-slate-600 text-sm mb-8">{message}</p>
+          <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Ir para o login
+          </Button>
+        </>
+      )}
+      {status === "error" && (
+        <>
+          <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-red-50">
+            <XCircle className="h-10 w-10 text-red-500" />
+          </div>
+          <h2 className="text-3xl font-black text-slate-950 mb-3">Link inválido</h2>
+          <p className="text-slate-600 text-sm mb-8">{message}</p>
+          <Button variant="outline" className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Voltar para o login
+          </Button>
+        </>
+      )}
+    </section>
+  );
+};
+
+/* ─── App autenticado principal ─── */
+const AuthenticatedApp = () => {
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
+  const [showRegister, setShowRegister] = useState(false);
+
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
@@ -148,16 +462,20 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Handle authentication errors
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required' || authError.type === 'login_failed') {
-      return <LoginScreen />;
+  const goToLogin = () => { setShowRegister(false); };
+
+  // Só exibe o app principal se o usuário estiver autenticado
+  if (!isAuthenticated) {
+    if (authError?.type === 'user_not_registered') return <UserNotRegisteredError />;
+    if (authError?.type === 'verify_email_pending') return <VerifyEmailPendingScreen onGoToLogin={goToLogin} />;
+    if (authError?.type === 'email_not_verified') return <LoginScreen onGoToRegister={() => setShowRegister(true)} />;
+    if (authError?.type === 'login_code_required' || authError?.type === 'login_code_failed') {
+      return <LoginCodeScreen onCancel={goToLogin} />;
     }
+    if (showRegister) return <RegisterScreen onGoToLogin={goToLogin} />;
+    return <LoginScreen onGoToRegister={() => setShowRegister(true)} />;
   }
 
-  // Render the main app
   return (
     <Routes>
       {MainPage ? (
@@ -166,30 +484,45 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<PageNotFound />} />
       )}
       {Object.entries(Pages).map(([path, Page]) => (
-        <Route
-          key={path}
-          path={`/${path}`}
-          element={<RouteElement Page={Page} currentPageName={path} />}
-        />
+        <Route key={path} path={`/${path}`}
+          element={<RouteElement Page={Page} currentPageName={path} />} />
       ))}
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
 };
 
+/* ─── Wrapper que captura /verify-email antes da auth ─── */
+const AppRouter = () => {
+  const { clearPendingVerification } = useAuth();
+  const navigate = useNavigate();
+
+  return (
+    <Routes>
+      {/* Rota pública de verificação de e-mail */}
+      <Route path="/verify-email" element={
+        <VerifyEmailCallbackScreen onGoToLogin={() => {
+          clearPendingVerification();
+          navigate("/");
+        }} />
+      } />
+      {/* Todas as demais rotas passam pelo fluxo de autenticação */}
+      <Route path="/*" element={<AuthenticatedApp />} />
+    </Routes>
+  );
+};
 
 function App() {
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
-          <AuthenticatedApp />
+          <AppRouter />
         </Router>
         <Toaster />
       </QueryClientProvider>
     </AuthProvider>
-  )
+  );
 }
 
-export default App
+export default App;

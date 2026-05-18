@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { GraduationCap, Plus, Pencil, Trash2, Search } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { GraduationCap, Plus, Pencil, Trash2, Search, Download, FileSpreadsheet, Upload, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { jsPDF } from "jspdf";
+import * as XLSX from "xlsx";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,16 +13,38 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 
+const normalizeKey = (key) => String(key || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+
+const detectField = (row, candidates) => {
+  for (const key of Object.keys(row)) {
+    if (candidates.includes(normalizeKey(key))) return row[key] || "";
+  }
+  return "";
+};
+
+const parseAlunoRow = (row) => ({
+  nome: detectField(row, ["nome", "name", "aluno", "student", "aluno(a)"]),
+  matricula: detectField(row, ["matricula", "mat", "registration", "matriculation", "rm", "ra"]),
+  email: detectField(row, ["email", "e-mail", "mail"]),
+});
+
 export default function Alunos() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [filterTurma, setFilterTurma] = useState("all");
   const [form, setForm] = useState({ nome: "", matricula: "", email: "", turma_id: "", ativo: true });
+  const [importRows, setImportRows] = useState([]);
+  const [importTurmaId, setImportTurmaId] = useState("");
+  const [importProgress, setImportProgress] = useState(null);
+  const [importResults, setImportResults] = useState(null);
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
   const { data: turmas = [] } = useQuery({ queryKey: ["turmas"], queryFn: () => appClient.entities.Turma.list() });
@@ -31,19 +56,146 @@ export default function Alunos() {
   const closeDialog = () => { setDialogOpen(false); setEditing(null); setForm({ nome: "", matricula: "", email: "", turma_id: "", ativo: true }); };
   const openEdit = (a) => { setEditing(a); setForm({ nome: a.nome, matricula: a.matricula || "", email: a.email || "", turma_id: a.turma_id || "", ativo: a.ativo !== false }); setDialogOpen(true); };
 
+  const closeImportDialog = () => {
+    setImportDialogOpen(false);
+    setImportRows([]);
+    setImportTurmaId("");
+    setImportProgress(null);
+    setImportResults(null);
+  };
+
   const handleSubmit = () => {
     if (!form.nome || !form.turma_id) return;
+    const isChangingTurma = editing ? editing.turma_id !== form.turma_id : true;
+    if (!editing || isChangingTurma) {
+      const alunosNaTurma = alunos.filter(a => a.turma_id === form.turma_id && a.id !== editing?.id);
+      if (alunosNaTurma.length >= 30) {
+        toast({ title: "Limite atingido", description: "Esta turma já possui 30 alunos (limite máximo).", variant: "destructive" });
+        return;
+      }
+    }
     editing ? update.mutate({ id: editing.id, d: form }) : create.mutate(form);
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        const parsed = rows.map(parseAlunoRow).filter(r => r.nome.trim());
+        setImportRows(parsed);
+        setImportResults(null);
+      } catch {
+        toast({ title: "Erro ao ler arquivo", description: "Verifique se o arquivo é um CSV ou XLSX válido.", variant: "destructive" });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const handleImport = async () => {
+    if (!importTurmaId || importRows.length === 0) return;
+
+    const alunosNaTurma = alunos.filter(a => a.turma_id === importTurmaId);
+    const vagas = 30 - alunosNaTurma.length;
+    const toImport = importRows.slice(0, Math.max(0, vagas));
+
+    if (toImport.length === 0) {
+      toast({ title: "Turma lotada", description: "Esta turma já possui 30 alunos.", variant: "destructive" });
+      return;
+    }
+
+    const results = { ok: 0, fail: 0, skipped: importRows.length - toImport.length };
+    setImportProgress({ current: 0, total: toImport.length });
+
+    for (let i = 0; i < toImport.length; i++) {
+      const row = toImport[i];
+      try {
+        await appClient.entities.Aluno.create({ nome: row.nome.trim(), matricula: row.matricula || "", email: row.email || "", turma_id: importTurmaId, ativo: true });
+        results.ok++;
+      } catch {
+        results.fail++;
+      }
+      setImportProgress({ current: i + 1, total: toImport.length });
+    }
+
+    qc.invalidateQueries({ queryKey: ["alunos"] });
+    setImportResults(results);
+    setImportProgress(null);
+  };
+
   const getTurmaName = (id) => turmas.find(t => t.id === id)?.nome || "—";
+
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filtered = alunos
     .filter(a => filterTurma === "all" || a.turma_id === filterTurma)
     .filter(a => a.nome?.toLowerCase().includes(search.toLowerCase()) || a.matricula?.toLowerCase().includes(search.toLowerCase()));
 
+  const buildAlunosRows = () =>
+    filtered.map(a => ({
+      Nome: a.nome,
+      Matrícula: a.matricula || "",
+      Email: a.email || "",
+      Turma: getTurmaName(a.turma_id),
+      Status: a.ativo !== false ? "Ativo" : "Inativo",
+    }));
+
+  const exportAlunosXLSX = () => {
+    const rows = buildAlunosRows();
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Info: "Sem dados" }]);
+    XLSX.utils.book_append_sheet(wb, ws, "Alunos");
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    downloadBlob(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "lista_alunos.xlsx");
+  };
+
+  const exportAlunosPDF = () => {
+    const rows = buildAlunosRows();
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    let y = 14;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Lista de Alunos", 14, y);
+    y += 8;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    rows.forEach((row, i) => {
+      if (y > 278) { doc.addPage(); y = 14; }
+      doc.text(`${i + 1}. ${row.Nome}  |  Mat: ${row.Matrícula || "—"}  |  ${row.Turma}`, 14, y);
+      y += 6;
+    });
+    doc.save("lista_alunos.pdf");
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <PageHeader title="Alunos" description="Gerencie os alunos de suas turmas" action={() => setDialogOpen(true)} actionLabel="Novo Aluno" actionIcon={Plus} />
+
+      <div className="flex flex-wrap gap-2 mb-3">
+        <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+          <Upload className="w-4 h-4 mr-2" />Importar em Lote
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportAlunosXLSX} disabled={filtered.length === 0}>
+          <FileSpreadsheet className="w-4 h-4 mr-2" />Exportar XLSX
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportAlunosPDF} disabled={filtered.length === 0}>
+          <Download className="w-4 h-4 mr-2" />Exportar PDF
+        </Button>
+      </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <div className="relative flex-1">
@@ -105,6 +257,7 @@ export default function Alunos() {
         </Card>
       )}
 
+      {/* Dialog: Novo/Editar aluno */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!v) closeDialog(); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editing ? "Editar Aluno" : "Novo Aluno"}</DialogTitle></DialogHeader>
@@ -124,6 +277,115 @@ export default function Alunos() {
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
             <Button onClick={handleSubmit} disabled={create.isPending || update.isPending}>{editing ? "Salvar" : "Criar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Importar em lote */}
+      <Dialog open={importDialogOpen} onOpenChange={v => { if (!v) closeImportDialog(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Importar Alunos em Lote</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Selecione um arquivo <strong>CSV ou XLSX</strong> com as colunas: <strong>Nome</strong>, Matrícula (opcional), Email (opcional).
+            </p>
+
+            <div className="space-y-2">
+              <Label>Arquivo (CSV ou XLSX)</Label>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-foreground"
+              />
+            </div>
+
+            {importRows.length > 0 && (
+              <>
+                <div className="space-y-2">
+                  <Label>Turma de destino *</Label>
+                  <Select value={importTurmaId} onValueChange={setImportTurmaId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a turma" /></SelectTrigger>
+                    <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                  {importTurmaId && (
+                    <p className="text-xs text-muted-foreground">
+                      Vagas disponíveis: {Math.max(0, 30 - alunos.filter(a => a.turma_id === importTurmaId).length)} de 30
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium mb-2">{importRows.length} aluno(s) detectado(s) — pré-visualização:</p>
+                  <div className="max-h-48 overflow-y-auto border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Nome</TableHead>
+                          <TableHead className="text-xs">Matrícula</TableHead>
+                          <TableHead className="text-xs">Email</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {importRows.slice(0, 20).map((row, i) => (
+                          <TableRow key={i} className={!row.nome.trim() ? "opacity-40" : ""}>
+                            <TableCell className="text-xs py-1">{row.nome || "—"}</TableCell>
+                            <TableCell className="text-xs py-1 text-muted-foreground">{row.matricula || "—"}</TableCell>
+                            <TableCell className="text-xs py-1 text-muted-foreground">{row.email || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                        {importRows.length > 20 && (
+                          <TableRow><TableCell colSpan={3} className="text-xs text-center text-muted-foreground">... e mais {importRows.length - 20} registros</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {importProgress && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Importando {importProgress.current} de {importProgress.total}...</p>
+                <Progress value={(importProgress.current / importProgress.total) * 100} />
+              </div>
+            )}
+
+            {importResults && (
+              <Card>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-success">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span className="text-sm font-medium">{importResults.ok} aluno(s) importado(s) com sucesso</span>
+                  </div>
+                  {importResults.fail > 0 && (
+                    <div className="flex items-center gap-2 text-destructive">
+                      <XCircle className="w-4 h-4" />
+                      <span className="text-sm">{importResults.fail} falha(s)</span>
+                    </div>
+                  )}
+                  {importResults.skipped > 0 && (
+                    <p className="text-xs text-muted-foreground">{importResults.skipped} ignorado(s) por limite da turma (máx. 30).</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeImportDialog}>
+              {importResults ? "Fechar" : "Cancelar"}
+            </Button>
+            {!importResults && (
+              <Button
+                onClick={handleImport}
+                disabled={!importTurmaId || importRows.length === 0 || !!importProgress}
+              >
+                {importProgress ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                {importProgress ? "Importando..." : `Importar ${importRows.length} aluno(s)`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

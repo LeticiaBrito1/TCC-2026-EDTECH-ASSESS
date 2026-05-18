@@ -112,7 +112,7 @@ export default function Disciplinas() {
                   <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label>Carga Horária</Label><Input type="number" value={form.carga_horaria} onChange={e => setForm({ ...form, carga_horaria: e.target.value })} placeholder="Horas" /></div>
+              <div className="space-y-2"><Label>Carga Horária</Label><Input type="number" min={0} max={9999} value={form.carga_horaria} onChange={e => setForm({ ...form, carga_horaria: e.target.value })} placeholder="Ex: 80" /></div>
             </div>
             <div className="space-y-2"><Label>Descrição</Label><Textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })} rows={3} /></div>
           </div>

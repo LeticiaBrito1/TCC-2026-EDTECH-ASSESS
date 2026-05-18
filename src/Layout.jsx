@@ -15,7 +15,8 @@ import {
   LogOut,
   ScanLine,
   ChevronDown,
-  Bell
+  Bell,
+  UserCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -219,6 +220,12 @@ export default function Layout({ children, currentPageName }) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem asChild>
+                  <Link to={createPageUrl("Perfil")} className="flex items-center cursor-pointer">
+                    <UserCircle className="w-4 h-4 mr-2" />
+                    Meu Perfil
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={logout}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair

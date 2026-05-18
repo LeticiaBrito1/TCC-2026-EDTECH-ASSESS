@@ -5,7 +5,13 @@ import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 
+router.post("/auth/register", asyncHandler(authController.register));
+router.get("/auth/verify-email", asyncHandler(authController.verifyEmail));
+router.post("/auth/resend-verification", asyncHandler(authController.resendVerification));
 router.post("/auth/login", asyncHandler(authController.login));
+router.post("/auth/verify-login-code", asyncHandler(authController.verifyLoginCode));
 router.get("/auth/me", authenticate, asyncHandler(authController.me));
+router.patch("/auth/profile", authenticate, asyncHandler(authController.updateProfile));
+router.post("/auth/change-password", authenticate, asyncHandler(authController.changePassword));
 
 export { router as authRoutes };

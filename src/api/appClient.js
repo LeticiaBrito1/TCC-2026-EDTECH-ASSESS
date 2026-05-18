@@ -120,11 +120,31 @@ const createClient = () => {
       },
     },
     auth: {
+      register: async ({ full_name, email, password }) => {
+        return request("/api/auth/register", {
+          method: "POST",
+          skipAuth: true,
+          body: { full_name, email, password },
+        });
+      },
+      verifyEmail: async (token) =>
+        request(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, { skipAuth: true }),
+      resendVerification: async (email) =>
+        request("/api/auth/resend-verification", { method: "POST", skipAuth: true, body: { email } }),
       login: async (email, password) => {
         const result = await request("/api/auth/login", {
           method: "POST",
           skipAuth: true,
           body: { email, password },
+        });
+        // Retorna { step: "code_required", email } — token ainda não emitido
+        return result;
+      },
+      verifyLoginCode: async (email, code) => {
+        const result = await request("/api/auth/verify-login-code", {
+          method: "POST",
+          skipAuth: true,
+          body: { email, code },
         });
         if (result?.token) {
           setAuthToken(result.token);
@@ -132,6 +152,8 @@ const createClient = () => {
         return result?.user || null;
       },
       me: async () => request("/api/auth/me"),
+      updateProfile: async (data) => request("/api/auth/profile", { method: "PATCH", body: data }),
+      changePassword: async (data) => request("/api/auth/change-password", { method: "POST", body: data }),
       logout: () => {
         clearAuthToken();
       },

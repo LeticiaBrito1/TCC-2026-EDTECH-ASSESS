@@ -1,4 +1,7 @@
+const WEAK_SECRETS = new Set(["dev-secret", "secret", "changeme", "jwt-secret", "tcc", "123456", "password"]);
+
 export const env = {
+  nodeEnv: String(process.env.NODE_ENV || "development").trim().toLowerCase(),
   port: Number(process.env.PORT || 8787),
   frontendOrigins: (process.env.FRONTEND_ORIGIN || "http://localhost:5174")
     .split(",")
@@ -24,4 +27,29 @@ export const env = {
   devProfessorName: String(process.env.DEV_PROFESSOR_NAME || "Professor").trim(),
   lmsWebhookUrl: String(process.env.LMS_WEBHOOK_URL || "").trim(),
   notificationsWebhookUrl: String(process.env.NOTIFICATIONS_WEBHOOK_URL || "").trim(),
+  // E-mail / SMTP
+  smtpHost: String(process.env.SMTP_HOST || "").trim(),
+  smtpPort: Number(process.env.SMTP_PORT || 587),
+  smtpUser: String(process.env.SMTP_USER || "").trim(),
+  smtpPass: String(process.env.SMTP_PASS || "").trim(),
+  smtpFrom: String(process.env.SMTP_FROM || "noreply@edtech.local").trim(),
+  appUrl: String(process.env.APP_URL || "http://localhost:5174").trim().replace(/\/+$/, ""),
 };
+
+const jwtSecret = env.jwtSecret;
+const isProduction = env.nodeEnv === "production";
+
+if (WEAK_SECRETS.has(jwtSecret.toLowerCase()) || jwtSecret.length < 32) {
+  if (isProduction) {
+    console.error(
+      "[security] CRÍTICO: JWT_SECRET fraco ou padrão detectado em ambiente de produção. " +
+      "Defina um valor aleatório de pelo menos 32 caracteres antes de continuar."
+    );
+    process.exit(1);
+  } else {
+    console.warn(
+      "[security] AVISO: JWT_SECRET fraco ou padrão. " +
+      "Substitua por um valor aleatório de pelo menos 32 caracteres antes de ir para produção."
+    );
+  }
+}

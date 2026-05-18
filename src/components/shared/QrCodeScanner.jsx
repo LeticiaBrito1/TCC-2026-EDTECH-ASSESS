@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CameraOff, QrCode } from "lucide-react";
+import { Camera, CameraOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 const DEFAULT_SCAN_CONFIG = {
   fps: 10,
@@ -19,7 +17,6 @@ export default function QrCodeScanner({ onDecoded }) {
 
   const [isScanning, setIsScanning] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-  const [manualValue, setManualValue] = useState("");
   const [lastDecoded, setLastDecoded] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -135,11 +132,6 @@ export default function QrCodeScanner({ onDecoded }) {
     }
   };
 
-  const handleManualSubmit = () => {
-    emitDecoded(manualValue);
-    setManualValue("");
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
@@ -164,20 +156,6 @@ export default function QrCodeScanner({ onDecoded }) {
         <p className="text-sm text-destructive">{errorMessage}</p>
       )}
 
-      <div className="space-y-2">
-        <Label>Ou cole o conteúdo do QR Code</Label>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Input
-            value={manualValue}
-            onChange={(e) => setManualValue(e.target.value)}
-            placeholder='Ex: {"avaliacao_id":"...","aluno_id":"..."}'
-          />
-          <Button variant="secondary" onClick={handleManualSubmit} disabled={!manualValue.trim()}>
-            <QrCode className="w-4 h-4 mr-2" />
-            Validar QR
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }
