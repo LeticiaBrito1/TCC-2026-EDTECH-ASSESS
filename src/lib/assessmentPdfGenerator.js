@@ -110,6 +110,16 @@ const drawCoverPage = async ({ doc, assessment, disciplinaNome, turmaNome, aluno
   const qrDataUrl = await QRCode.toDataURL(qrPayload, { margin: 1, width: 300 });
   doc.addImage(qrDataUrl, "PNG", pageWidth - margin - qrSize, margin, qrSize, qrSize);
 
+  // QR payload text below QR image (for manual entry)
+  doc.setFontSize(5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(120);
+  doc.text("Código (correção manual):", pageWidth - margin - qrSize, margin + qrSize + 3.5);
+  doc.setFontSize(4.8);
+  const qrTextLines = doc.splitTextToSize(qrPayload, qrSize);
+  doc.text(qrTextLines, pageWidth - margin - qrSize, margin + qrSize + 7);
+  doc.setTextColor(0);
+
   y += 6;
 
   // Separator line
@@ -199,29 +209,106 @@ const drawQuestion = ({ doc, question, index, cursorY, peso }) => {
 
 const drawAnswerKeyPage = ({ doc, assessment, versionLabel, versionQuestions }) => {
   doc.addPage();
+  const pageWidth = doc.internal.pageSize.getWidth();
   const margin = PAGE.margin;
   let y = margin;
 
+  // Fundo cinza claro no cabeçalho
+  doc.setFillColor(230, 230, 230);
+  doc.rect(0, 0, pageWidth, 22, "F");
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text("Gabarito", margin, y);
-  y += 7;
+  doc.setTextColor(30, 30, 30);
+  doc.text("GABARITO DO PROFESSOR", margin, y + 5);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text(`${assessment.titulo || "Avaliação"} — Versão ${versionLabel}`, margin, y);
+  doc.setFontSize(9);
+  doc.setTextColor(80, 80, 80);
+  doc.text(`${assessment.titulo || "Avaliação"} — Versão ${versionLabel}`, margin, y + 12);
+  doc.text("USO EXCLUSIVO DO PROFESSOR — NÃO DISTRIBUIR", pageWidth - margin, y + 12, { align: "right" });
+
+  doc.setTextColor(0, 0, 0);
+  y = 30;
+
+  // Linha separadora
+  doc.setDrawColor(150);
+  doc.line(margin, y, pageWidth - margin, y);
   y += 8;
 
-  const entries = versionQuestions.map((q, idx) => `${idx + 1}: ${q.gabarito || "—"}`);
-  const colSize = Math.ceil(entries.length / 3);
-  const cols = [entries.slice(0, colSize), entries.slice(colSize, colSize * 2), entries.slice(colSize * 2)];
-  const colWidth = 55;
+  // Grade de respostas com círculos visuais
+  const letters = ["A", "B", "C", "D", "E"];
+  const circleR = 3.5;
+  const circleSpacing = 9;
+  const cols = 3;
+  const colWidth = (pageWidth - margin * 2) / cols;
+  const rowHeight = 14;
 
-  cols.forEach((col, colIndex) => {
-    col.forEach((value, rowIndex) => {
-      doc.text(value, margin + colIndex * colWidth, y + rowIndex * 6);
+  versionQuestions.forEach((q, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = margin + col * colWidth;
+    const qy = y + row * rowHeight;
+
+    if (qy + rowHeight > doc.internal.pageSize.getHeight() - margin) return;
+
+    const gabarito = String(q.gabarito || "").toUpperCase();
+    const alts = q.alternativas?.length > 0 ? q.alternativas.map(a => a.letra) : letters;
+
+    // Número da questão
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 30, 30);
+    doc.text(`${idx + 1}.`, x, qy);
+
+    alts.forEach((letra, li) => {
+      const cx = x + 8 + li * circleSpacing;
+      const cy = qy - 2.5;
+      const isCorrect = letra === gabarito;
+
+      if (isCorrect) {
+        // Círculo preenchido para a resposta correta
+        doc.setFillColor(30, 30, 30);
+        doc.circle(cx, cy, circleR, "F");
+        doc.setTextColor(255, 255, 255);
+      } else {
+        // Círculo vazio para as erradas
+        doc.setDrawColor(150);
+        doc.circle(cx, cy, circleR, "S");
+        doc.setTextColor(160, 160, 160);
+      }
+
+      doc.setFont("helvetica", isCorrect ? "bold" : "normal");
+      doc.setFontSize(7);
+      doc.text(letra, cx - 1.5, cy + 0.5);
     });
+
+    // Reset cores
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
   });
+
+  // Resumo do gabarito em texto simples abaixo da grade
+  const totalRows = Math.ceil(versionQuestions.length / cols);
+  let resumoY = y + totalRows * rowHeight + 6;
+
+  doc.setDrawColor(180);
+  doc.line(margin, resumoY, pageWidth - margin, resumoY);
+  resumoY += 6;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(60, 60, 60);
+  doc.text("Respostas:", margin, resumoY);
+  resumoY += 5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const summaryEntries = versionQuestions.map((q, i) => `${i + 1}:${q.gabarito || "—"}`);
+  const summaryLine = summaryEntries.join("  ");
+  const summaryLines = doc.splitTextToSize(summaryLine, pageWidth - margin * 2);
+  doc.text(summaryLines, margin, resumoY);
+  doc.setTextColor(0, 0, 0);
 };
 
 export const generateAssessmentPdf = async ({

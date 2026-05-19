@@ -13,66 +13,50 @@ const parseResponseError = async (response) => {
   }
 };
 
-const request = async (
-  path,
-  { method = "GET", body, token } = {}
-) => {
-  const headers = {
-    "Content-Type": "application/json",
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
+const request = async (path, { method = "GET", body, token } = {}) => {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-
-  if (!response.ok) {
-    throw new Error(await parseResponseError(response));
-  }
-
+  if (!response.ok) throw new Error(await parseResponseError(response));
   if (response.status === 204) return null;
   return response.json();
 };
 
 export const apiLogin = ({ email, password }) =>
-  request("/api/auth/login", {
-    method: "POST",
-    body: { email, password },
-  });
+  request("/api/auth/login", { method: "POST", body: { email, password } });
+
+export const apiRegister = ({ full_name, email, password }) =>
+  request("/api/auth/register", { method: "POST", body: { full_name, email, password } });
+
+export const apiForgotPassword = (email) =>
+  request("/api/auth/forgot-password", { method: "POST", body: { email } });
 
 export const apiVerifyLoginCode = ({ email, code }) =>
-  request("/api/auth/verify-login-code", {
-    method: "POST",
-    body: { email, code },
-  });
+  request("/api/auth/verify-login-code", { method: "POST", body: { email, code } });
 
-export const apiMe = (token) =>
-  request("/api/auth/me", {
-    method: "GET",
-    token,
-  });
+export const apiMe = (token) => request("/api/auth/me", { token });
+
+export const apiUpdateProfile = (token, data) =>
+  request("/api/auth/profile", { method: "PATCH", token, body: data });
+
+export const apiChangePassword = (token, data) =>
+  request("/api/auth/change-password", { method: "POST", token, body: data });
 
 export const apiCorrectByOcr = (token, payload) =>
-  request("/api/corrections/ocr", {
-    method: "POST",
-    token,
-    body: payload,
-  });
+  request("/api/corrections/ocr", { method: "POST", token, body: payload });
 
-export const apiListEntities = (token, entity) =>
-  request(`/api/entities/${entity}`, {
-    method: "GET",
-    token,
-  });
+export const apiList = (token, entity) =>
+  request(`/api/entities/${entity}`, { token });
 
-export const apiCreateEntity = (token, entity, payload) =>
-  request(`/api/entities/${entity}`, {
-    method: "POST",
-    token,
-    body: payload,
-  });
+export const apiCreate = (token, entity, payload) =>
+  request(`/api/entities/${entity}`, { method: "POST", token, body: payload });
+
+export const apiUpdate = (token, entity, id, payload) =>
+  request(`/api/entities/${entity}/${id}`, { method: "PUT", token, body: payload });
+
+export const apiDelete = (token, entity, id) =>
+  request(`/api/entities/${entity}/${id}`, { method: "DELETE", token });

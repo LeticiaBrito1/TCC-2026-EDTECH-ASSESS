@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { GraduationCap, Plus, Pencil, Trash2, Search, Download, FileSpreadsheet, Upload, Loader2, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
+import { GraduationCap, Plus, Pencil, Trash2, Search, Download, FileSpreadsheet, Upload, Loader2, CheckCircle2, XCircle, ArrowUpDown, ClipboardCheck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -36,6 +36,8 @@ const parseAlunoRow = (row) => ({
 export default function Alunos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedAluno, setSelectedAluno] = useState(null);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [filterTurma, setFilterTurma] = useState("all");
@@ -51,13 +53,24 @@ export default function Alunos() {
 
   const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
   const { data: turmas = [] } = useQuery({ queryKey: ["turmas"], queryFn: () => appClient.entities.Turma.list() });
+  const { data: avaliacoes = [] } = useQuery({ queryKey: ["avaliacoes"], queryFn: () => appClient.entities.Avaliacao.list() });
+  const { data: resultados = [] } = useQuery({ queryKey: ["resultados"], queryFn: () => appClient.entities.Resultado.list() });
 
   const create = useMutation({ mutationFn: (d) => appClient.entities.Aluno.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["alunos"] }); closeDialog(); } });
   const update = useMutation({ mutationFn: ({ id, d }) => appClient.entities.Aluno.update(id, d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["alunos"] }); closeDialog(); } });
   const remove = useMutation({ mutationFn: (id) => appClient.entities.Aluno.delete(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["alunos"] }) });
 
   const closeDialog = () => { setDialogOpen(false); setEditing(null); setForm({ nome: "", matricula: "", email: "", turma_id: "", ativo: true }); };
-  const openEdit = (a) => { setEditing(a); setForm({ nome: a.nome, matricula: a.matricula || "", email: a.email || "", turma_id: a.turma_id || "", ativo: a.ativo !== false }); setDialogOpen(true); };
+  const openEdit = (a, e) => {
+    e?.stopPropagation();
+    setEditing(a);
+    setForm({ nome: a.nome, matricula: a.matricula || "", email: a.email || "", turma_id: a.turma_id || "", ativo: a.ativo !== false });
+    setDialogOpen(true);
+  };
+
+  const openDetail = (a) => { setSelectedAluno(a); setDetailOpen(true); };
+
+  const handleDelete = (id, e) => { e?.stopPropagation(); remove.mutate(id); };
 
   const closeImportDialog = () => {
     setImportDialogOpen(false);
@@ -172,13 +185,13 @@ export default function Alunos() {
   const filtered = alunos
     .filter(a => filterTurma === "all" || a.turma_id === filterTurma)
     .filter(a => filterStatus === "all" || (filterStatus === "ativo" ? a.ativo !== false : a.ativo === false))
-    .filter(a => a.nome?.toLowerCase().includes(search.toLowerCase()) || a.matricula?.toLowerCase().includes(search.toLowerCase()))
+    .filter(a => a.nome?.toLowerCase().includes(search.toLowerCase()) || String(a.matricula ?? "").toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       switch (sortBy) {
         case "nome_asc":  return (a.nome || "").localeCompare(b.nome || "", "pt-BR");
         case "nome_desc": return (b.nome || "").localeCompare(a.nome || "", "pt-BR");
-        case "mat_asc":   return (a.matricula || "").localeCompare(b.matricula || "", "pt-BR");
-        case "mat_desc":  return (b.matricula || "").localeCompare(a.matricula || "", "pt-BR");
+        case "mat_asc":   return String(a.matricula ?? "").localeCompare(String(b.matricula ?? ""), "pt-BR");
+        case "mat_desc":  return String(b.matricula ?? "").localeCompare(String(a.matricula ?? ""), "pt-BR");
         case "turma":     return getTurmaName(a.turma_id).localeCompare(getTurmaName(b.turma_id), "pt-BR");
         default: return 0;
       }
@@ -219,6 +232,9 @@ export default function Alunos() {
     });
     doc.save("lista_alunos.pdf");
   };
+
+  const getResultadosDoAluno = (alunoId) => resultados.filter(r => r.aluno_id === alunoId);
+  const getAvaliacaoTitulo = (avaliacaoId) => avaliacoes.find(a => a.id === avaliacaoId)?.titulo || "—";
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -296,28 +312,16 @@ export default function Alunos() {
                     className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => setSortBy(s => s === "nome_asc" ? "nome_desc" : "nome_asc")}
                   >
-                    <span className="flex items-center gap-1">
-                      Nome
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                    </span>
+                    <span className="flex items-center gap-1">Nome <ArrowUpDown className="w-3 h-3 opacity-50" /></span>
                   </TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => setSortBy(s => s === "mat_asc" ? "mat_desc" : "mat_asc")}
                   >
-                    <span className="flex items-center gap-1">
-                      Matrícula
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                    </span>
+                    <span className="flex items-center gap-1">Matrícula <ArrowUpDown className="w-3 h-3 opacity-50" /></span>
                   </TableHead>
-                  <TableHead
-                    className="cursor-pointer select-none hover:text-foreground"
-                    onClick={() => setSortBy("turma")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Turma
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                    </span>
+                  <TableHead className="cursor-pointer select-none hover:text-foreground" onClick={() => setSortBy("turma")}>
+                    <span className="flex items-center gap-1">Turma <ArrowUpDown className="w-3 h-3 opacity-50" /></span>
                   </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-20">Ações</TableHead>
@@ -325,7 +329,11 @@ export default function Alunos() {
               </TableHeader>
               <TableBody>
                 {filtered.map(a => (
-                  <TableRow key={a.id}>
+                  <TableRow
+                    key={a.id}
+                    className="cursor-pointer hover:bg-accent/50"
+                    onClick={() => openDetail(a)}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
@@ -341,9 +349,9 @@ export default function Alunos() {
                     <TableCell><Badge variant="outline" className="text-xs">{getTurmaName(a.turma_id)}</Badge></TableCell>
                     <TableCell><Badge variant={a.ativo !== false ? "default" : "secondary"} className="text-xs">{a.ativo !== false ? "Ativo" : "Inativo"}</Badge></TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => openEdit(a, e)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => handleDelete(a.id, e)}><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -374,6 +382,90 @@ export default function Alunos() {
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
             <Button onClick={handleSubmit} disabled={create.isPending || update.isPending}>{editing ? "Salvar" : "Criar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Detalhe do aluno */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                {selectedAluno?.nome?.[0]?.toUpperCase()}
+              </div>
+              {selectedAluno?.nome}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedAluno && (
+            <div className="space-y-5 py-2">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Matrícula</p>
+                  <p className="font-medium">{selectedAluno.matricula || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Turma</p>
+                  <p className="font-medium">{getTurmaName(selectedAluno.turma_id)}</p>
+                </div>
+                {selectedAluno.email && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">E-mail</p>
+                    <p className="font-medium">{selectedAluno.email}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <Badge variant={selectedAluno.ativo !== false ? "default" : "secondary"} className="text-xs mt-1">
+                    {selectedAluno.ativo !== false ? "Ativo" : "Inativo"}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4 text-primary" />
+                  Notas nas Avaliações ({getResultadosDoAluno(selectedAluno.id).length})
+                </h3>
+                {getResultadosDoAluno(selectedAluno.id).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma avaliação corrigida para este aluno.</p>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Avaliação</TableHead>
+                          <TableHead className="text-xs text-right">Acertos</TableHead>
+                          <TableHead className="text-xs text-right">%</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {getResultadosDoAluno(selectedAluno.id).map(r => (
+                          <TableRow key={r.id}>
+                            <TableCell className="text-xs py-2">{getAvaliacaoTitulo(r.avaliacao_id)}</TableCell>
+                            <TableCell className="text-xs py-2 text-right text-muted-foreground">
+                              {r.acertos ?? "—"}{r.total_questoes ? `/${r.total_questoes}` : ""}
+                            </TableCell>
+                            <TableCell className="text-xs py-2 text-right font-medium">
+                              {r.percentual_acerto != null ? `${Number(r.percentual_acerto).toFixed(1)}%` : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailOpen(false)}>Fechar</Button>
+            {selectedAluno && (
+              <Button onClick={(e) => { setDetailOpen(false); openEdit(selectedAluno, e); }}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

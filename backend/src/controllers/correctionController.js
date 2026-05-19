@@ -3,8 +3,9 @@ import { correctionService } from "../services/correctionService.js";
 import { HttpError } from "../utils/httpError.js";
 
 const ocrPayloadSchema = z.object({
-  avaliacao_id: z.string().uuid(),
-  aluno_id: z.string().uuid(),
+  // IDs são opcionais quando a imagem é enviada — o modelo de visão os extrai do cartão resposta.
+  avaliacao_id: z.string().uuid().optional(),
+  aluno_id: z.string().uuid().optional(),
   image_base64: z.string().optional(),
   recognized_text: z.string().optional(),
 });
@@ -20,10 +21,11 @@ export const correctionController = {
       throw new HttpError(400, "Envie image_base64 ou recognized_text para corrigir.");
     }
 
+    // Se nenhum ID foi fornecido, o serviço tentará extraí-los da imagem via IA de visão.
     const result = await correctionService.correctByOcr(
       {
-        avaliacaoId: parsed.data.avaliacao_id,
-        alunoId: parsed.data.aluno_id,
+        avaliacaoId: parsed.data.avaliacao_id || null,
+        alunoId: parsed.data.aluno_id || null,
         imageBase64: parsed.data.image_base64,
         recognizedText: parsed.data.recognized_text,
       },

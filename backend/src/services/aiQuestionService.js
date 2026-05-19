@@ -8,6 +8,12 @@ const hasOpenAiKey = Boolean(OPENAI_API_KEY);
 const openai = hasOpenAiKey
   ? new OpenAI({ apiKey: OPENAI_API_KEY })
   : null;
+
+const hasGroqKey = Boolean(env.groqApiKey);
+const groq = hasGroqKey
+  ? new OpenAI({ apiKey: env.groqApiKey, baseURL: "https://api.groq.com/openai/v1" })
+  : null;
+
 const OLLAMA_TIMEOUT_MS = 120000;
 const PREVIEW_MAX_CHARS = 240;
 
@@ -157,17 +163,15 @@ const normalizeQuantidade = (value, fallback = 5) => {
   return Math.max(1, Math.min(20, Math.trunc(parsed)));
 };
 
-const isValidProvider = (provider) => ["ollama", "openai"].includes(String(provider || "").toLowerCase());
+const isValidProvider = (provider) => ["ollama", "openai", "groq"].includes(String(provider || "").toLowerCase());
 
 const resolveProviders = () => {
   if (isValidProvider(env.aiProvider)) {
     return [env.aiProvider];
   }
 
-  if (hasOpenAiKey) {
-    return ["openai", "ollama"];
-  }
-
+  if (hasGroqKey) return ["groq", "openai", "ollama"];
+  if (hasOpenAiKey) return ["openai", "ollama"];
   return ["ollama"];
 };
 
@@ -430,6 +434,39 @@ const generateWithOpenAi = async (payload, defaults) => {
   };
 };
 
+const generateWithGroq = async (payload, defaults) => {
+  const startedAt = Date.now();
+
+  if (!groq) throw new Error("GROQ_API_KEY não configurada.");
+
+  logAiInfo("Iniciando chamada ao provedor Groq.", {
+    model: env.groqModel,
+    tema: payload.tema,
+    quantidade: payload.quantidade,
+  });
+
+  const completion = await groq.chat.completions.create({
+    model: env.groqModel,
+    temperature: 0.7,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: "Você gera questões no formato JSON solicitado, sem texto adicional." },
+      { role: "user", content: buildPrompt(payload) },
+    ],
+  });
+
+  const rawContent = completion.choices?.[0]?.message?.content || "";
+  const questions = parseAndNormalizeQuestions(rawContent, defaults);
+
+  logAiInfo("Groq respondeu com sucesso.", {
+    model: completion.model || env.groqModel,
+    questions: questions.length,
+    duration_ms: elapsedMs(startedAt),
+  });
+
+  return { source: "groq", model: completion.model || env.groqModel, reason: "", questions };
+};
+
 const generateWithOllama = async (payload, defaults) => {
   const startedAt = Date.now();
   const baseUrls = resolveOllamaBaseUrls();
@@ -563,6 +600,15 @@ export async function generateQuestions(payload) {
     const providerStartedAt = Date.now();
 
     try {
+      if (provider === "groq") {
+        const result = await generateWithGroq(payload, defaults);
+        logAiInfo("Provedor concluído com sucesso.", {
+          provider, source: result.source, model: result.model || "",
+          questions: result.questions.length, duration_ms: elapsedMs(providerStartedAt), total_duration_ms: elapsedMs(startedAt),
+        });
+        return result;
+      }
+
       if (provider === "openai") {
         const result = await generateWithOpenAi(payload, defaults);
         logAiInfo("Provedor concluído com sucesso.", {

@@ -1,6 +1,6 @@
 {
   "name": "projeto-tcc-ia-mobile",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -10,15 +10,18 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~51.0.28",
-    "expo-camera": "~15.0.16",
-    "expo-image-picker": "~15.0.7",
-    "expo-secure-store": "~13.0.2",
-    "react": "18.2.0",
-    "react-native": "0.74.5"
+    "@react-navigation/bottom-tabs": "^6.6.1",
+    "@react-navigation/native": "^6.1.18",
+    "expo": "^54.0.0",
+    "expo-camera": "~17.0.10",
+    "expo-image-picker": "~17.0.11",
+    "expo-secure-store": "~15.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "babel-preset-expo": "^11.0.10"
+    "babel-preset-expo": "~54.0.10"
   }
 }

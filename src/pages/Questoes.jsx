@@ -37,6 +37,8 @@ export default function Questoes() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState("all");
+  const [filterTema, setFilterTema] = useState("all");
+  const [filterCompetencia, setFilterCompetencia] = useState("all");
   const [form, setForm] = useState(emptyForm());
   const [aiForm, setAiForm] = useState(emptyAiForm);
   const [materialNome, setMaterialNome] = useState("");
@@ -137,30 +139,62 @@ export default function Questoes() {
   const getDisciplinaName = (id) => disciplinas.find(d => d.id === id)?.nome || "";
   const diffColor = { facil: "bg-success/10 text-success", medio: "bg-warning/10 text-warning", dificil: "bg-destructive/10 text-destructive" };
 
+  const temas = [...new Set(questoes.map(q => q.tema).filter(Boolean))].sort();
+  const competencias = [...new Set(questoes.map(q => q.competencia).filter(Boolean))].sort();
+  const hasFilters = filterDifficulty !== "all" || filterTema !== "all" || filterCompetencia !== "all" || search.trim();
+
   const filtered = questoes
     .filter(q => filterDifficulty === "all" || q.nivel_dificuldade === filterDifficulty)
+    .filter(q => filterTema === "all" || q.tema === filterTema)
+    .filter(q => filterCompetencia === "all" || q.competencia === filterCompetencia)
     .filter(q => q.enunciado?.toLowerCase().includes(search.toLowerCase()) || q.tema?.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <PageHeader title="Banco de Questões" description="Cadastre e organize suas questões" action={() => setDialogOpen(true)} actionLabel="Nova Questão" actionIcon={Plus} />
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar questões..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Buscar questões..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+          </div>
+          <Button variant="secondary" onClick={() => setAiDialogOpen(true)}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Gerar com IA
+          </Button>
         </div>
-        <Button variant="secondary" onClick={() => setAiDialogOpen(true)}>
-          <Sparkles className="w-4 h-4 mr-2" />
-          Gerar com IA
-        </Button>
-        <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
-          <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            {Object.entries(DIFICULDADES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+          <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
+            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Nível" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os níveis</SelectItem>
+              {Object.entries(DIFICULDADES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterTema} onValueChange={setFilterTema}>
+            <SelectTrigger className="w-full sm:w-40"><SelectValue placeholder="Tema" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os temas</SelectItem>
+              {temas.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterCompetencia} onValueChange={setFilterCompetencia}>
+            <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Competência" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as competências</SelectItem>
+              {competencias.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {hasFilters && (
+            <button
+              className="text-xs text-primary hover:underline self-center"
+              onClick={() => { setSearch(""); setFilterDifficulty("all"); setFilterTema("all"); setFilterCompetencia("all"); }}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (

@@ -21,12 +21,15 @@ const buildResult = (obj) => {
 };
 
 export const parseQrPayload = (rawValue) => {
-  const raw = String(rawValue || "").trim();
+  // Remove todo whitespace (espacos, quebras de linha, tabs) — UUIDs nao tem espacos.
+  const raw = String(rawValue || "").replace(/\s/g, "");
   if (!raw) return null;
 
-  if (raw.startsWith("{") && raw.endsWith("}")) {
+  if (raw.startsWith("{")) {
+    // Auto-completa "}" se o texto foi copiado incompleto do PDF.
+    const jsonStr = raw.endsWith("}") ? raw : raw + "}";
     try {
-      const parsedJson = JSON.parse(raw);
+      const parsedJson = JSON.parse(jsonStr);
       const result = buildResult(parsedJson);
       if (result) return result;
     } catch {

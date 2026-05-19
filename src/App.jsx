@@ -11,7 +11,8 @@ import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { ScanLine, Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck, KeyRound } from "lucide-react";
+import { Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck, KeyRound } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -39,7 +40,7 @@ const RouteElement = ({ Page, currentPageName }) => (
 const AuthHero = () => (
   <section className="rounded-[2rem] bg-slate-950 px-8 py-10 text-white shadow-2xl shadow-slate-950/20">
     <div className="mb-10 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/20">
-      <ScanLine className="h-7 w-7 text-cyan-300" />
+      <img src="/logoEDTECH.png" alt="EdTech Assess" className="h-9 w-9 object-contain" />
     </div>
     <p className="mb-4 text-xs font-bold uppercase tracking-[0.35em] text-cyan-300">EdTech Assess</p>
     <h1 className="max-w-lg text-4xl font-black leading-tight sm:text-5xl">
@@ -50,8 +51,8 @@ const AuthHero = () => (
     </p>
     <div className="mt-10 grid gap-4 sm:grid-cols-3">
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <p className="text-sm font-semibold text-white">IA local com Ollama</p>
-        <p className="mt-2 text-sm text-slate-300">Gere questões automaticamente sem custo de API.</p>
+        <p className="text-sm font-semibold text-white">IA com Groq/Llama</p>
+        <p className="mt-2 text-sm text-slate-300">Gere questões automaticamente com IA avançada.</p>
       </div>
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <p className="text-sm font-semibold text-white">Correção por OCR</p>
@@ -359,6 +360,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
   const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm_password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -377,6 +379,9 @@ const RegisterScreen = ({ onGoToLogin }) => {
     }
     if (form.password !== form.confirm_password) {
       setLocalError("As senhas não coincidem."); return;
+    }
+    if (!termsAccepted) {
+      setLocalError("Você deve aceitar os termos de privacidade para criar uma conta."); return;
     }
     try {
       await register({ full_name: form.full_name.trim(), email: form.email.trim(), password: form.password });
@@ -436,8 +441,22 @@ const RegisterScreen = ({ onGoToLogin }) => {
           A conta será criada com perfil de <strong>professor</strong>. Permissões de administrador são concedidas manualmente.
         </div>
 
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="terms"
+            checked={termsAccepted}
+            onCheckedChange={(v) => setTermsAccepted(Boolean(v))}
+            className="mt-0.5 shrink-0"
+          />
+          <label htmlFor="terms" className="text-xs text-slate-500 cursor-pointer leading-relaxed">
+            Li e aceito os{" "}
+            <span className="font-semibold text-teal-700">Termos de Uso</span> e a{" "}
+            <span className="font-semibold text-teal-700">Política de Privacidade</span> da plataforma EdTech Assess.
+          </label>
+        </div>
+
         <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
-          disabled={isSubmittingRegister}>
+          disabled={isSubmittingRegister || !termsAccepted}>
           {isSubmittingRegister ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Criando conta...</> : "Criar conta"}
         </Button>
       </form>
@@ -630,7 +649,7 @@ const VerifyEmailCallbackScreen = ({ onGoToLogin }) => {
 
 /* ─── App autenticado principal ─── */
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, clearPendingVerification } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
 
@@ -642,7 +661,7 @@ const AuthenticatedApp = () => {
     );
   }
 
-  const goToLogin = () => { setShowRegister(false); setShowForgot(false); };
+  const goToLogin = () => { setShowRegister(false); setShowForgot(false); clearPendingVerification(); };
 
   // Só exibe o app principal se o usuário estiver autenticado
   if (!isAuthenticated) {

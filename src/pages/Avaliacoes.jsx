@@ -22,7 +22,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { format, isValid, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -167,6 +166,12 @@ export default function Avaliacoes() {
 
       const allQuestoesIds = [...selectedIds, ...createdQuestions.map((q) => q.id)];
 
+      const totalPontos = Math.min(100, Math.max(0, Math.round((Number(aiForm.total_pontos) || 10) * 100) / 100));
+      const valorPorQuestao = allQuestoesIds.length > 0
+        ? Math.round((totalPontos / allQuestoesIds.length) * 100) / 100
+        : 0;
+      const questoes_pesos = Object.fromEntries(allQuestoesIds.map(id => [id, valorPorQuestao]));
+
       const avaliacaoPayload = {
         titulo: aiForm.titulo,
         disciplina_id: aiForm.disciplina_id,
@@ -174,7 +179,8 @@ export default function Avaliacoes() {
         data_aplicacao: aiForm.data_aplicacao || "",
         status: aiForm.status || "rascunho",
         questoes_ids: allQuestoesIds,
-        total_pontos: Math.min(100, Math.max(0, Math.round((Number(aiForm.total_pontos) || 10) * 100) / 100)),
+        total_pontos: totalPontos,
+        questoes_pesos,
         embaralhar_questoes: Boolean(aiForm.embaralhar_questoes),
         embaralhar_alternativas: Boolean(aiForm.embaralhar_alternativas),
         instrucoes: aiForm.instrucoes || ""
@@ -463,7 +469,22 @@ export default function Avaliacoes() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
-      <PageHeader title="Avaliações" description="Crie e gerencie suas provas" action={() => setDialogOpen(true)} actionLabel="Nova Avaliação" actionIcon={Plus} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">Avaliações</h1>
+          <p className="text-muted-foreground mt-1">Crie e gerencie suas provas</p>
+        </div>
+        <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setAiDialogOpen(true)}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Gerar com IA
+          </Button>
+          <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto bg-primary hover:bg-primary/90 shadow-md">
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Avaliação
+          </Button>
+        </div>
+      </div>
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -524,10 +545,6 @@ export default function Avaliacoes() {
       </div>
 
       <div className="mb-6 flex flex-col sm:flex-row gap-3">
-        <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setAiDialogOpen(true)}>
-          <Sparkles className="w-4 h-4 mr-2" />
-          Gerar Avaliação com IA
-        </Button>
         <Button variant="outline" className="w-full sm:w-auto" onClick={resetFilters} disabled={!hasActiveFilters}>
           Limpar filtros
         </Button>

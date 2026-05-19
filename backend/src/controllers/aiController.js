@@ -10,7 +10,7 @@ const questionRequestSchema = z.object({
   quantidade: z.coerce.number().int().min(1).max(20).default(5),
   nivel_dificuldade: z.enum(["facil", "medio", "dificil"]).default("medio"),
   competencia: z.string().max(200).optional(),
-  contexto: z.string().max(2000).optional(),
+  contexto: z.string().max(4000).optional(),
   formato: z.string().optional(),
   linguagem: z.string().optional(),
 });

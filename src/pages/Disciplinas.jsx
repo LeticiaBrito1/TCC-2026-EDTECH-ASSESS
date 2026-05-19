@@ -114,7 +114,13 @@ export default function Disciplinas() {
               </div>
               <div className="space-y-2"><Label>Carga Horária (h)</Label><Input type="number" min={0} max={999} step={1} value={form.carga_horaria} onChange={e => setForm({ ...form, carga_horaria: e.target.value.slice(0, 3) })} placeholder="Ex: 80" /></div>
             </div>
-            <div className="space-y-2"><Label>Descrição</Label><Textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })} rows={3} /></div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Descrição</Label>
+                <span className="text-xs text-muted-foreground">{form.descricao.length}/500</span>
+              </div>
+              <Textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value.slice(0, 500) })} rows={3} maxLength={500} />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>

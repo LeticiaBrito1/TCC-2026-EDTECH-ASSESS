@@ -10,7 +10,9 @@ export const env = {
   databaseUrl: String(process.env.DATABASE_URL || "").trim(),
   pgSsl: String(process.env.PGSSL || "false").toLowerCase() === "true",
   allowDbFallback: String(process.env.ALLOW_DB_FALLBACK || "false").toLowerCase() === "true",
-  aiProvider: String(process.env.AI_PROVIDER || "ollama").trim().toLowerCase(),
+  aiProvider: String(process.env.AI_PROVIDER || "groq").trim().toLowerCase(),
+  groqApiKey: String(process.env.GROQ_API_KEY || "").trim(),
+  groqModel: String(process.env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(),
   openAiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
   hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
   ollamaBaseUrl: String(process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434")
