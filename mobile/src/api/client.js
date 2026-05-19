@@ -45,6 +45,12 @@ export const apiLogin = ({ email, password }) =>
     body: { email, password },
   });
 
+export const apiVerifyLoginCode = ({ email, code }) =>
+  request("/api/auth/verify-login-code", {
+    method: "POST",
+    body: { email, code },
+  });
+
 export const apiMe = (token) =>
   request("/api/auth/me", {
     method: "GET",
@@ -62,4 +68,11 @@ export const apiListEntities = (token, entity) =>
   request(`/api/entities/${entity}`, {
     method: "GET",
     token,
+  });
+
+export const apiCreateEntity = (token, entity, payload) =>
+  request(`/api/entities/${entity}`, {
+    method: "POST",
+    token,
+    body: payload,
   });

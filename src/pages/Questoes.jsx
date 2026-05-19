@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
+import { extractTextFromFile, ACCEPTED_FILE_TYPES, ACCEPTED_FILE_LABEL } from "@/lib/fileTextExtractor";
 
 const DIFICULDADES = { facil: "Fácil", medio: "Médio", dificil: "Difícil" };
 const LETRAS = ["A", "B", "C", "D", "E"];
@@ -29,13 +30,6 @@ const emptyAiForm = {
   tema: "", quantidade: 5, nivel: "medio", disciplina_id: "", competencia: "", contexto: ""
 };
 
-const readFileAsText = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Falha ao ler arquivo."));
-    reader.readAsText(file, "UTF-8");
-  });
 
 export default function Questoes() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -79,10 +73,11 @@ export default function Questoes() {
       const normalizedSource = String(source || "").trim().toLowerCase();
       const usedFallback = FALLBACK_AI_SOURCES.has(normalizedSource);
       toast({
-        title: "Questões geradas",
+        title: usedFallback ? "Questões de exemplo criadas" : "Questões geradas pela IA",
         description: usedFallback
-          ? `${count} questão(ões) criadas em modo local. ${reason || "Verifique a conexão com Ollama."}`
-          : `${count} questão(ões) geradas pela IA e adicionadas ao banco.`
+          ? `${count} questão(ões) de placeholder criadas. Configure a chave GROQ_API_KEY no backend para gerar questões reais.`
+          : `${count} questão(ões) geradas pela IA (${source}) e adicionadas ao banco.`,
+        variant: usedFallback ? "destructive" : "default",
       });
     },
     onError: (error) => {
@@ -124,25 +119,18 @@ export default function Questoes() {
     if (!file) return;
     e.target.value = "";
 
-    const allowedTypes = ["text/plain", "text/markdown", "text/csv", "application/csv", "text/x-markdown"];
-    const isText = allowedTypes.includes(file.type) || /\.(txt|md|csv)$/i.test(file.name);
-
-    if (!isText) {
-      toast({
-        title: "Formato não suportado",
-        description: "Anexe um arquivo .txt, .md ou .csv. Para PDFs, copie e cole o texto no campo Contexto.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
-      const text = await readFileAsText(file);
-      const truncated = text.slice(0, 4000);
-      setAiForm(prev => ({ ...prev, contexto: prev.contexto ? `${prev.contexto}\n\n--- ${file.name} ---\n${truncated}` : `--- ${file.name} ---\n${truncated}` }));
+      const text = await extractTextFromFile(file);
+      const truncated = text.trim().slice(0, 4000);
+      setAiForm(prev => ({
+        ...prev,
+        contexto: prev.contexto
+          ? `${prev.contexto}\n\n--- ${file.name} ---\n${truncated}`
+          : `--- ${file.name} ---\n${truncated}`
+      }));
       setMaterialNome(file.name);
     } catch {
-      toast({ title: "Erro ao ler arquivo", description: "Não foi possível ler o conteúdo do arquivo.", variant: "destructive" });
+      toast({ title: "Erro ao ler arquivo", description: "Não foi possível extrair o conteúdo do arquivo.", variant: "destructive" });
     }
   };
 
@@ -325,13 +313,13 @@ export default function Questoes() {
                 <label className="cursor-pointer">
                   <input
                     type="file"
-                    accept=".txt,.md,.csv"
+                    accept={ACCEPTED_FILE_TYPES}
                     onChange={handleMaterialFile}
                     className="sr-only"
                   />
                   <span className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors">
                     <Paperclip className="w-3.5 h-3.5" />
-                    Anexar .txt / .md
+                    Anexar material
                   </span>
                 </label>
               </div>
@@ -351,7 +339,7 @@ export default function Questoes() {
                 onChange={e => setAiForm({ ...aiForm, contexto: e.target.value })}
                 placeholder="Cole aqui o conteúdo do material didático ou descreva o contexto da avaliação..."
               />
-              <p className="text-xs text-muted-foreground">Para PDFs: abra o PDF e copie o texto relevante para este campo.</p>
+              <p className="text-xs text-muted-foreground">Aceita PDF, Word, PowerPoint, Excel, TXT, MD e CSV (até 4 000 caracteres extraídos).</p>
             </div>
           </div>
           <DialogFooter>

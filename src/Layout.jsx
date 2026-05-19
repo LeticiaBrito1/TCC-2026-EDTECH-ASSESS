@@ -16,7 +16,8 @@ import {
   ScanLine,
   ChevronDown,
   Bell,
-  UserCircle
+  UserCircle,
+  CreditCard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -37,6 +38,7 @@ const navItems = [
   { name: "Avaliações", page: "Avaliacoes", icon: ClipboardCheck },
   { name: "Correção", page: "Correcao", icon: ScanLine },
   { name: "Relatórios", page: "Relatorios", icon: BarChart3 },
+  { name: "Pagamento", page: "Pagamento", icon: CreditCard },
 ];
 
 export default function Layout({ children, currentPageName }) {

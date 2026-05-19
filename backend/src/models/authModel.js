@@ -132,6 +132,29 @@ export const incrementTokenVersion = async (id) => {
   );
 };
 
+export const setResetToken = async (id, token, expires) => {
+  await query(
+    `UPDATE app_users SET reset_token = $1, reset_token_expires = $2, updated_at = NOW() WHERE id = $3`,
+    [token, expires, id]
+  );
+};
+
+export const findUserByResetToken = async (token) => {
+  const { rows } = await query(
+    `SELECT id, full_name, email, role, active, reset_token, reset_token_expires
+     FROM app_users WHERE reset_token = $1 LIMIT 1`,
+    [token]
+  );
+  return rows[0] || null;
+};
+
+export const clearResetToken = async (id) => {
+  await query(
+    `UPDATE app_users SET reset_token = NULL, reset_token_expires = NULL, updated_at = NOW() WHERE id = $1`,
+    [id]
+  );
+};
+
 export const listActiveUsers = async () => {
   const { rows } = await query(
     `

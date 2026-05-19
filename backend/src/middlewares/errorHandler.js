@@ -19,6 +19,14 @@ export const errorHandler = (error, req, res, _next) => {
     return;
   }
 
+  // Imagem maior que o limite aceito
+  if (error?.type === "entity.too.large" || error?.status === 413) {
+    res.status(413).json({
+      error: "Imagem muito grande. Reduza a qualidade ou o tamanho da foto e tente novamente (limite: 15 MB).",
+    });
+    return;
+  }
+
   // Erros inesperados: loga no servidor, nunca expõe detalhes internos ao cliente
   console.error("[errorHandler] Erro interno não tratado.", {
     method: req.method,

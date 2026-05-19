@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2, Download, Share2, Paperclip, X } from "lucide-react";
+import { ClipboardCheck, Plus, Pencil, Trash2, Search, FileText, Sparkles, Loader2, Download, Share2, Paperclip, X, ListChecks } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
 import { generateAssessmentPdf } from "@/lib/assessmentPdfGenerator";
+import { extractTextFromFile, ACCEPTED_FILE_TYPES, ACCEPTED_FILE_LABEL } from "@/lib/fileTextExtractor";
 
 const STATUS_MAP = {
   rascunho: { label: "Rascunho", class: "bg-muted text-muted-foreground" },
@@ -50,7 +51,8 @@ const emptyAiForm = {
   data_aplicacao: "",
   embaralhar_questoes: true,
   embaralhar_alternativas: false,
-  instrucoes: ""
+  instrucoes: "",
+  selectedQuestaoIds: [],
 };
 
 const FALLBACK_AI_SOURCES = new Set(["fallback", "mock", "local"]);
@@ -79,6 +81,12 @@ export default function Avaliacoes() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [aiForm, setAiForm] = useState(emptyAiForm);
   const [materialNome, setMaterialNome] = useState("");
+  const [questoesBancoSearch, setQuestoesBancoSearch] = useState("");
+  const [bancoSortBy, setBancoSortBy] = useState("az");
+  const [bancoNivelFilter, setBancoNivelFilter] = useState("all");
+  const [questoesSortBy, setQuestoesSortBy] = useState("az");
+  const [questoesNivelFilter, setQuestoesNivelFilter] = useState("all");
+  const [questoesSearch, setQuestoesSearch] = useState("");
   const [form, setForm] = useState({
     titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho",
     questoes_ids: [], total_pontos: 10, questoes_pesos: {}, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: ""
@@ -116,29 +124,48 @@ export default function Avaliacoes() {
   });
   const generateWithAi = useMutation({
     mutationFn: async () => {
-      if (!aiForm.titulo || !aiForm.turma_id || !aiForm.disciplina_id || !aiForm.tema) {
-        throw new Error("Preencha título, turma, disciplina e tema para gerar com IA.");
+      const selectedIds = Array.isArray(aiForm.selectedQuestaoIds) ? aiForm.selectedQuestaoIds : [];
+      const gerarNovos = Number(aiForm.quantidade) > 0;
+      if (!aiForm.titulo) {
+        throw new Error("Preencha o título da avaliação.");
+      }
+      if (gerarNovos && !aiForm.tema) {
+        throw new Error("Informe o tema para gerar questões com IA.");
+      }
+      if (!gerarNovos && selectedIds.length === 0) {
+        throw new Error("Selecione ao menos uma questão do banco ou defina uma quantidade para gerar com IA.");
       }
 
       await appClient.auth.me();
 
-      const { questions, source, reason } = await generateQuestionsForAssessment({
-        titulo: aiForm.titulo,
-        tema: aiForm.tema,
-        quantidade: aiForm.quantidade,
-        nivel: aiForm.nivel,
-        disciplinaId: aiForm.disciplina_id,
-        competencia: aiForm.competencia,
-        contexto: aiForm.contexto
-      });
+      let questions = [];
+      let source = "banco";
+      let reason = "";
 
-      if (questions.length === 0) {
-        throw new Error("Nenhuma questão foi retornada para gerar a avaliação.");
+      if (gerarNovos) {
+        const aiResult = await generateQuestionsForAssessment({
+          titulo: aiForm.titulo,
+          tema: aiForm.tema,
+          quantidade: aiForm.quantidade,
+          nivel: aiForm.nivel,
+          disciplinaId: aiForm.disciplina_id,
+          competencia: aiForm.competencia,
+          contexto: aiForm.contexto
+        });
+        questions = aiResult.questions;
+        source = aiResult.source;
+        reason = aiResult.reason;
       }
 
-      const createdQuestions = await Promise.all(
-        questions.map((question) => appClient.entities.Questao.create(question))
-      );
+      if (questions.length === 0 && selectedIds.length === 0) {
+        throw new Error("Nenhuma questão disponível. Gere questões com IA ou selecione do banco.");
+      }
+
+      const createdQuestions = questions.length > 0
+        ? await Promise.all(questions.map((question) => appClient.entities.Questao.create(question)))
+        : [];
+
+      const allQuestoesIds = [...selectedIds, ...createdQuestions.map((q) => q.id)];
 
       const avaliacaoPayload = {
         titulo: aiForm.titulo,
@@ -146,7 +173,7 @@ export default function Avaliacoes() {
         turma_id: aiForm.turma_id,
         data_aplicacao: aiForm.data_aplicacao || "",
         status: aiForm.status || "rascunho",
-        questoes_ids: createdQuestions.map((question) => question.id),
+        questoes_ids: allQuestoesIds,
         total_pontos: Math.min(100, Math.max(0, Math.round((Number(aiForm.total_pontos) || 10) * 100) / 100)),
         embaralhar_questoes: Boolean(aiForm.embaralhar_questoes),
         embaralhar_alternativas: Boolean(aiForm.embaralhar_alternativas),
@@ -154,21 +181,24 @@ export default function Avaliacoes() {
       };
 
       const createdAssessment = await appClient.entities.Avaliacao.create(avaliacaoPayload);
-      return { createdAssessment, createdCount: createdQuestions.length, source, reason };
+      return { createdAssessment, createdCount: createdQuestions.length, selectedCount: selectedIds.length, source, reason };
     },
-    onSuccess: ({ createdCount, source, reason }) => {
+    onSuccess: ({ createdCount, selectedCount, source, reason }) => {
       qc.invalidateQueries({ queryKey: ["questoes"] });
       qc.invalidateQueries({ queryKey: ["avaliacoes"] });
       closeAiDialog();
 
       const normalizedSource = String(source || "").trim().toLowerCase();
       const usedFallback = FALLBACK_AI_SOURCES.has(normalizedSource);
+      const total = (createdCount || 0) + (selectedCount || 0);
+      const parts = [];
+      if (createdCount > 0) parts.push(`${createdCount} gerada(s) pela IA${usedFallback ? " (placeholder)" : ` (${source})`}`);
+      if (selectedCount > 0) parts.push(`${selectedCount} do banco`);
 
       toast({
-        title: "Avaliação gerada",
-        description: usedFallback
-          ? `${createdCount} questão(ões) criadas em modo local. ${reason || "Verifique a conexão com o provedor de IA configurado (OLLAMA_BASE_URL/OLLAMA_MODEL ou OPENAI_API_KEY)."}`
-          : `${createdCount} questão(ões) geradas por IA e vinculadas à avaliação.`
+        title: "Avaliação criada",
+        description: `${total} questão(ões) vinculadas: ${parts.join(" + ")}.`,
+        variant: usedFallback && selectedCount === 0 ? "destructive" : "default",
       });
     },
     onError: (error) => {
@@ -183,39 +213,28 @@ export default function Avaliacoes() {
   const closeDialog = () => {
     setDialogOpen(false); setEditing(null);
     setForm({ titulo: "", disciplina_id: "", turma_id: "", data_aplicacao: "", status: "rascunho", questoes_ids: [], total_pontos: 10, questoes_pesos: {}, embaralhar_questoes: false, embaralhar_alternativas: false, instrucoes: "" });
+    setQuestoesSortBy("az");
+    setQuestoesNivelFilter("all");
+    setQuestoesSearch("");
   };
 
   const closeAiDialog = () => {
     setAiDialogOpen(false);
     setAiForm(emptyAiForm);
     setMaterialNome("");
+    setQuestoesBancoSearch("");
+    setBancoSortBy("az");
+    setBancoNivelFilter("all");
   };
-
-  const readFileAsText = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result || "");
-      reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
-      reader.readAsText(file, "utf-8");
-    });
 
   const handleMaterialFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    const allowedTypes = ["text/plain", "text/markdown", "text/csv", "application/csv", "text/x-csv"];
-    const isText = allowedTypes.includes(file.type) || /\.(txt|md|csv)$/i.test(file.name);
-    if (!isText) {
-      toast({
-        title: "Tipo de arquivo não suportado",
-        description: "Selecione arquivos .txt, .md ou .csv. Para PDFs, copie e cole o texto no campo Contexto.",
-        variant: "destructive"
-      });
-      return;
-    }
+
     try {
-      const text = await readFileAsText(file);
-      const truncated = text.slice(0, 4000);
+      const text = await extractTextFromFile(file);
+      const truncated = text.trim().slice(0, 4000);
       setAiForm(prev => ({
         ...prev,
         contexto: prev.contexto
@@ -224,7 +243,7 @@ export default function Avaliacoes() {
       }));
       setMaterialNome(file.name);
     } catch {
-      toast({ title: "Erro ao ler arquivo", description: "Não foi possível ler o arquivo selecionado.", variant: "destructive" });
+      toast({ title: "Erro ao ler arquivo", description: "Não foi possível extrair o conteúdo do arquivo.", variant: "destructive" });
     }
   };
 
@@ -400,7 +419,22 @@ export default function Avaliacoes() {
     return isValid(parsedDate) ? format(parsedDate, "dd/MM/yyyy") : "";
   };
 
-  const filteredDisc = form.disciplina_id ? questoes.filter(q => q.disciplina_id === form.disciplina_id) : questoes;
+  const filteredDisc = questoes
+    .filter(q => !form.disciplina_id || q.disciplina_id === form.disciplina_id)
+    .filter(q => questoesNivelFilter === "all" || q.nivel === questoesNivelFilter)
+    .filter(q => {
+      const t = questoesSearch.toLowerCase();
+      return !t || (q.enunciado || "").toLowerCase().includes(t) || (q.tema || "").toLowerCase().includes(t);
+    })
+    .sort((a, b) => {
+      if (questoesSortBy === "za") return (b.enunciado || "").localeCompare(a.enunciado || "", "pt-BR");
+      if (questoesSortBy === "tema") return (a.tema || "").localeCompare(b.tema || "", "pt-BR");
+      if (questoesSortBy === "nivel") {
+        const order = { facil: 0, medio: 1, dificil: 2 };
+        return (order[a.nivel] ?? 1) - (order[b.nivel] ?? 1);
+      }
+      return (a.enunciado || "").localeCompare(b.enunciado || "", "pt-BR");
+    });
   const searchTerm = search.trim().toLowerCase();
   const filtered = avaliacoes
     .filter((a) => {
@@ -591,6 +625,31 @@ export default function Avaliacoes() {
                   </Button>
                 )}
               </div>
+              {/* Filtros e busca */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input className="pl-8 h-8 text-sm" placeholder="Buscar questão..." value={questoesSearch} onChange={e => setQuestoesSearch(e.target.value)} />
+                </div>
+                <Select value={questoesNivelFilter} onValueChange={setQuestoesNivelFilter}>
+                  <SelectTrigger className="h-8 text-sm w-full sm:w-32"><SelectValue placeholder="Nível" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="facil">Fácil</SelectItem>
+                    <SelectItem value="medio">Médio</SelectItem>
+                    <SelectItem value="dificil">Difícil</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={questoesSortBy} onValueChange={setQuestoesSortBy}>
+                  <SelectTrigger className="h-8 text-sm w-full sm:w-36"><SelectValue placeholder="Ordenar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="az">A → Z</SelectItem>
+                    <SelectItem value="za">Z → A</SelectItem>
+                    <SelectItem value="tema">Por tema</SelectItem>
+                    <SelectItem value="nivel">Por nível</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="max-h-56 overflow-y-auto space-y-2 border rounded-lg p-3">
                 {filteredDisc.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Nenhuma questão disponível. Cadastre questões primeiro.</p>
@@ -637,6 +696,7 @@ export default function Avaliacoes() {
             <div className="space-y-2">
               <Label>Título *</Label>
               <Input
+                spellCheck
                 value={aiForm.titulo}
                 onChange={e => setAiForm({ ...aiForm, titulo: e.target.value })}
                 placeholder="Ex: Avaliação diagnóstica de Matemática"
@@ -645,14 +705,14 @@ export default function Avaliacoes() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Turma *</Label>
+                <Label>Turma (opcional)</Label>
                 <Select value={aiForm.turma_id} onValueChange={v => setAiForm({ ...aiForm, turma_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Disciplina *</Label>
+                <Label>Disciplina (opcional)</Label>
                 <Select value={aiForm.disciplina_id} onValueChange={v => setAiForm({ ...aiForm, disciplina_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>{disciplinas.map(d => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}</SelectContent>
@@ -664,6 +724,7 @@ export default function Avaliacoes() {
               <div className="space-y-2">
                 <Label>Tema *</Label>
                 <Input
+                  spellCheck
                   value={aiForm.tema}
                   onChange={e => setAiForm({ ...aiForm, tema: e.target.value })}
                   placeholder="Ex: Equações do 1º grau"
@@ -672,6 +733,7 @@ export default function Avaliacoes() {
               <div className="space-y-2">
                 <Label>Competência</Label>
                 <Input
+                  spellCheck
                   value={aiForm.competencia}
                   onChange={e => setAiForm({ ...aiForm, competencia: e.target.value })}
                   placeholder="Ex: Resolver problemas matemáticos"
@@ -679,15 +741,147 @@ export default function Avaliacoes() {
               </div>
             </div>
 
+            {/* Questões do banco */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="w-4 h-4 text-muted-foreground" />
+                  <Label>Incluir questões do banco (opcional)</Label>
+                  {aiForm.selectedQuestaoIds.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{aiForm.selectedQuestaoIds.length} selecionada(s)</Badge>
+                  )}
+                </div>
+                {aiForm.selectedQuestaoIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => setAiForm(prev => ({ ...prev, selectedQuestaoIds: [] }))}
+                  >
+                    Limpar seleção
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    className="pl-8 h-8 text-sm"
+                    placeholder="Buscar por enunciado ou tema..."
+                    value={questoesBancoSearch}
+                    onChange={e => setQuestoesBancoSearch(e.target.value)}
+                  />
+                </div>
+                <Select value={bancoNivelFilter} onValueChange={setBancoNivelFilter}>
+                  <SelectTrigger className="h-8 text-sm w-full sm:w-32"><SelectValue placeholder="Nível" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="facil">Fácil</SelectItem>
+                    <SelectItem value="medio">Médio</SelectItem>
+                    <SelectItem value="dificil">Difícil</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={bancoSortBy} onValueChange={setBancoSortBy}>
+                  <SelectTrigger className="h-8 text-sm w-full sm:w-36"><SelectValue placeholder="Ordenar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="az">A → Z</SelectItem>
+                    <SelectItem value="za">Z → A</SelectItem>
+                    <SelectItem value="tema">Por tema</SelectItem>
+                    <SelectItem value="nivel">Por nível</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="border rounded-md max-h-48 overflow-y-auto divide-y">
+                {(() => {
+                  const term = questoesBancoSearch.toLowerCase();
+                  const filtered = questoes
+                    .filter(q => !aiForm.disciplina_id || q.disciplina_id === aiForm.disciplina_id)
+                    .filter(q => bancoNivelFilter === "all" || q.nivel === bancoNivelFilter)
+                    .filter(q => !term || (q.enunciado || "").toLowerCase().includes(term) || (q.tema || "").toLowerCase().includes(term))
+                    .sort((a, b) => {
+                      if (bancoSortBy === "za") return (b.enunciado || "").localeCompare(a.enunciado || "", "pt-BR");
+                      if (bancoSortBy === "tema") return (a.tema || "").localeCompare(b.tema || "", "pt-BR");
+                      if (bancoSortBy === "nivel") {
+                        const ord = { facil: 0, medio: 1, dificil: 2 };
+                        return (ord[a.nivel] ?? 1) - (ord[b.nivel] ?? 1);
+                      }
+                      return (a.enunciado || "").localeCompare(b.enunciado || "", "pt-BR");
+                    });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <p className="text-xs text-muted-foreground text-center py-4">
+                        {questoes.length === 0 ? "Nenhuma questão cadastrada no banco." : "Nenhuma questão encontrada com esses filtros."}
+                      </p>
+                    );
+                  }
+
+                  const allFilteredIds = filtered.map(q => q.id);
+                  const allSelected = allFilteredIds.every(id => aiForm.selectedQuestaoIds.includes(id));
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 sticky top-0">
+                        <span className="text-xs text-muted-foreground">{filtered.length} questão(ões)</span>
+                        <button
+                          type="button"
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => {
+                            setAiForm(prev => ({
+                              ...prev,
+                              selectedQuestaoIds: allSelected
+                                ? prev.selectedQuestaoIds.filter(id => !allFilteredIds.includes(id))
+                                : [...new Set([...prev.selectedQuestaoIds, ...allFilteredIds])]
+                            }));
+                          }}
+                        >
+                          {allSelected ? "Desmarcar todas" : "Selecionar todas"}
+                        </button>
+                      </div>
+                      {filtered.map(q => {
+                        const checked = aiForm.selectedQuestaoIds.includes(q.id);
+                        const nivelLabel = { facil: "Fácil", medio: "Médio", dificil: "Difícil" }[q.nivel];
+                        return (
+                          <label key={q.id} className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={v => {
+                                setAiForm(prev => ({
+                                  ...prev,
+                                  selectedQuestaoIds: v
+                                    ? [...prev.selectedQuestaoIds, q.id]
+                                    : prev.selectedQuestaoIds.filter(id => id !== q.id)
+                                }));
+                              }}
+                              className="mt-0.5 shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-foreground line-clamp-1">{q.enunciado}</p>
+                              <div className="flex gap-2 mt-0.5">
+                                {q.tema && <span className="text-xs text-muted-foreground">{q.tema}</span>}
+                                {nivelLabel && <Badge variant="outline" className="text-[10px] h-4 px-1 py-0">{nivelLabel}</Badge>}
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {aiForm.disciplina_id ? "Filtrado pela disciplina selecionada." : "Mostrando todas as questões do banco."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Quantidade de Questões</Label>
+                <Label>Questões a Gerar com IA</Label>
                 <Input
                   type="number"
-                  min={1}
+                  min={0}
                   max={20}
                   value={aiForm.quantidade}
-                  onChange={e => setAiForm({ ...aiForm, quantidade: Number(e.target.value || 1) })}
+                  onChange={e => setAiForm({ ...aiForm, quantidade: Number(e.target.value ?? 0) })}
                 />
               </div>
               <div className="space-y-2">
@@ -766,7 +960,7 @@ export default function Avaliacoes() {
                     </span>
                   )}
                   <label className="cursor-pointer">
-                    <input type="file" accept=".txt,.md,.csv" className="hidden" onChange={handleMaterialFile} />
+                    <input type="file" accept={ACCEPTED_FILE_TYPES} className="hidden" onChange={handleMaterialFile} />
                     <span className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                       <Paperclip className="w-3 h-3" />Anexar material
                     </span>
@@ -781,7 +975,7 @@ export default function Avaliacoes() {
                 placeholder="Informe o contexto da turma, objetivo da prova ou recorte do conteúdo."
               />
               <p className="text-xs text-muted-foreground">
-                Aceita .txt, .md e .csv (até 4 000 caracteres). Para PDFs: abra o PDF e copie o texto relevante para este campo.
+Aceita PDF, Word, PowerPoint, Excel, TXT, MD e CSV (até 4 000 caracteres extraídos).
               </p>
             </div>
 
@@ -832,7 +1026,10 @@ export default function Avaliacoes() {
               <Switch checked={pdfIncludeStudents} onCheckedChange={setPdfIncludeStudents} />
             </div>
             <div className="flex items-center justify-between gap-3">
-              <Label>Incluir gabarito por versão</Label>
+              <div>
+                <Label>Incluir cartão resposta do professor</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">Página com gabarito visual (círculos preenchidos) ao final do PDF</p>
+              </div>
               <Switch checked={pdfIncludeAnswerKey} onCheckedChange={setPdfIncludeAnswerKey} />
             </div>
           </div>

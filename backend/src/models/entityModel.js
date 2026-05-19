@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { query } from "../config/database.js";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUuid = (v) => UUID_REGEX.test(String(v || ""));
+
 const ENTITY_ALIASES = {
   turma: "turmas",
   turmas: "turmas",
@@ -89,6 +92,8 @@ export const listEntities = async (entityKey, actor) => {
 };
 
 export const getEntityById = async (entityKey, id, actor) => {
+  if (!isValidUuid(id)) return null;
+
   const { rows } = isAdmin(actor)
     ? await query(
         `

@@ -55,6 +55,22 @@ const changePasswordSchema = z.object({
     ),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email("E-mail inválido."),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token ausente."),
+  nova_senha: z
+    .string()
+    .min(8, "A nova senha deve ter no mínimo 8 caracteres.")
+    .max(200)
+    .refine(
+      (val) => /[A-Za-z]/.test(val) && /[0-9]/.test(val),
+      "A nova senha deve conter letras e números."
+    ),
+});
+
 export const authController = {
   async register(req, res) {
     const parsed = registerSchema.safeParse(req.body);
@@ -138,6 +154,20 @@ export const authController = {
     if (!parsed.success) throw new HttpError(400, "Dados inválidos.", parsed.error.flatten());
     await authService.changePassword(req.user.id, parsed.data);
     res.json({ ok: true });
+  },
+
+  async forgotPassword(req, res) {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new HttpError(400, "E-mail inválido.", parsed.error.flatten());
+    const result = await authService.forgotPassword(parsed.data.email.trim().toLowerCase());
+    res.json(result);
+  },
+
+  async resetPassword(req, res) {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new HttpError(400, "Dados inválidos.", parsed.error.flatten());
+    const result = await authService.resetPassword(parsed.data.token, parsed.data.nova_senha);
+    res.json(result);
   },
 
   async me(req, res) {

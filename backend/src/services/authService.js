@@ -12,11 +12,14 @@ import {
   setVerificationToken,
   setLoginCode,
   clearLoginCode,
+  setResetToken,
+  findUserByResetToken,
+  clearResetToken,
   updateUser,
   updateUserPassword,
   incrementTokenVersion,
 } from "../models/authModel.js";
-import { sendVerificationEmail, sendLoginCodeEmail } from "./emailService.js";
+import { sendVerificationEmail, sendLoginCodeEmail, sendPasswordResetEmail } from "./emailService.js";
 import { HttpError } from "../utils/httpError.js";
 
 const sanitizeUser = (user) => ({
@@ -172,6 +175,41 @@ export const authService = {
     const updated = await updateUser(userId, { full_name, email });
     if (!updated) throw new HttpError(404, "Usuário não encontrado.");
     return sanitizeUser(updated);
+  },
+
+  async forgotPassword(email) {
+    const user = await findUserByEmail(email);
+    // Resposta genérica: não revela se o e-mail existe
+    if (!user || !user.active || !user.email_verified) {
+      return { message: "Se o e-mail estiver cadastrado e verificado, você receberá um link em breve." };
+    }
+
+    const token = randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await setResetToken(user.id, token, expires);
+    await sendPasswordResetEmail({ toEmail: user.email, toName: user.full_name, token });
+
+    return { message: "Se o e-mail estiver cadastrado e verificado, você receberá um link em breve." };
+  },
+
+  async resetPassword(token, novaSenha) {
+    if (!token) throw new HttpError(400, "Token ausente.");
+
+    const user = await findUserByResetToken(token);
+    if (!user || !user.active) throw new HttpError(400, "Link de redefinição inválido ou já utilizado.");
+
+    if (new Date() > new Date(user.reset_token_expires)) {
+      await clearResetToken(user.id);
+      throw new HttpError(410, "Link de redefinição expirado. Solicite um novo.");
+    }
+
+    const newHash = await bcrypt.hash(novaSenha, 12);
+    await updateUserPassword(user.id, newHash);
+    await clearResetToken(user.id);
+    await incrementTokenVersion(user.id);
+
+    return { message: "Senha redefinida com sucesso. Faça login com a nova senha." };
   },
 
   async changePassword(userId, { senha_atual, nova_senha }) {

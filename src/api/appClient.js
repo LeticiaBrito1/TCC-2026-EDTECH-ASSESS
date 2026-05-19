@@ -154,6 +154,10 @@ const createClient = () => {
       me: async () => request("/api/auth/me"),
       updateProfile: async (data) => request("/api/auth/profile", { method: "PATCH", body: data }),
       changePassword: async (data) => request("/api/auth/change-password", { method: "POST", body: data }),
+      forgotPassword: async (email) =>
+        request("/api/auth/forgot-password", { method: "POST", skipAuth: true, body: { email } }),
+      resetPassword: async (token, nova_senha) =>
+        request("/api/auth/reset-password", { method: "POST", skipAuth: true, body: { token, nova_senha } }),
       logout: () => {
         clearAuthToken();
       },

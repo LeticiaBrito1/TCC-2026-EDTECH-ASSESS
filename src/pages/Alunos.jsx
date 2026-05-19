@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { GraduationCap, Plus, Pencil, Trash2, Search, Download, FileSpreadsheet, Upload, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { GraduationCap, Plus, Pencil, Trash2, Search, Download, FileSpreadsheet, Upload, Loader2, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import { extractTextFromFile } from "@/lib/fileTextExtractor";
 
 const normalizeKey = (key) => String(key || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
@@ -38,6 +39,8 @@ export default function Alunos() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [filterTurma, setFilterTurma] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [sortBy, setSortBy] = useState("nome_asc");
   const [form, setForm] = useState({ nome: "", matricula: "", email: "", turma_id: "", ativo: true });
   const [importRows, setImportRows] = useState([]);
   const [importTurmaId, setImportTurmaId] = useState("");
@@ -77,9 +80,35 @@ export default function Alunos() {
     editing ? update.mutate({ id: editing.id, d: form }) : create.mutate(form);
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+
+    const isPdf = /\.pdf$/i.test(file.name);
+
+    if (isPdf) {
+      try {
+        const text = await extractTextFromFile(file);
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const parsed = lines.map(line => {
+          const parts = line.split(/[,;\t]+/).map(p => p.trim());
+          const nome = parts[0] || "";
+          const matricula = parts[1] || "";
+          const email = parts.find(p => p.includes("@")) || "";
+          return { nome, matricula, email };
+        }).filter(r => r.nome && r.nome.toLowerCase() !== "nome");
+        if (parsed.length === 0) {
+          toast({ title: "Nenhum dado encontrado", description: "O PDF não contém linhas legíveis no formato Nome, Matrícula, Email.", variant: "destructive" });
+          return;
+        }
+        setImportRows(parsed);
+        setImportResults(null);
+      } catch {
+        toast({ title: "Erro ao ler PDF", description: "Não foi possível extrair dados do arquivo PDF.", variant: "destructive" });
+      }
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -96,7 +125,6 @@ export default function Alunos() {
       }
     };
     reader.readAsArrayBuffer(file);
-    e.target.value = "";
   };
 
   const handleImport = async () => {
@@ -143,7 +171,18 @@ export default function Alunos() {
 
   const filtered = alunos
     .filter(a => filterTurma === "all" || a.turma_id === filterTurma)
-    .filter(a => a.nome?.toLowerCase().includes(search.toLowerCase()) || a.matricula?.toLowerCase().includes(search.toLowerCase()));
+    .filter(a => filterStatus === "all" || (filterStatus === "ativo" ? a.ativo !== false : a.ativo === false))
+    .filter(a => a.nome?.toLowerCase().includes(search.toLowerCase()) || a.matricula?.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      switch (sortBy) {
+        case "nome_asc":  return (a.nome || "").localeCompare(b.nome || "", "pt-BR");
+        case "nome_desc": return (b.nome || "").localeCompare(a.nome || "", "pt-BR");
+        case "mat_asc":   return (a.matricula || "").localeCompare(b.matricula || "", "pt-BR");
+        case "mat_desc":  return (b.matricula || "").localeCompare(a.matricula || "", "pt-BR");
+        case "turma":     return getTurmaName(a.turma_id).localeCompare(getTurmaName(b.turma_id), "pt-BR");
+        default: return 0;
+      }
+    });
 
   const buildAlunosRows = () =>
     filtered.map(a => ({
@@ -197,18 +236,52 @@ export default function Alunos() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar alunos..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nome ou matrícula..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+          </div>
+          <Select value={filterTurma} onValueChange={setFilterTurma}>
+            <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Turma" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as turmas</SelectItem>
+              {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="ativo">Ativos</SelectItem>
+              <SelectItem value="inativo">Inativos</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-full sm:w-48">
+              <ArrowUpDown className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Ordenar por" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nome_asc">Nome A → Z</SelectItem>
+              <SelectItem value="nome_desc">Nome Z → A</SelectItem>
+              <SelectItem value="mat_asc">Matrícula ↑</SelectItem>
+              <SelectItem value="mat_desc">Matrícula ↓</SelectItem>
+              <SelectItem value="turma">Turma</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={filterTurma} onValueChange={setFilterTurma}>
-          <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Filtrar turma" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as turmas</SelectItem>
-            {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {(search || filterTurma !== "all" || filterStatus !== "all") && (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{filtered.length} aluno(s) encontrado(s)</span>
+            <button
+              className="text-primary hover:underline text-xs"
+              onClick={() => { setSearch(""); setFilterTurma("all"); setFilterStatus("all"); setSortBy("nome_asc"); }}
+            >
+              Limpar filtros
+            </button>
+          </div>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -219,9 +292,33 @@ export default function Alunos() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Matrícula</TableHead>
-                  <TableHead>Turma</TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => setSortBy(s => s === "nome_asc" ? "nome_desc" : "nome_asc")}
+                  >
+                    <span className="flex items-center gap-1">
+                      Nome
+                      <ArrowUpDown className="w-3 h-3 opacity-50" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => setSortBy(s => s === "mat_asc" ? "mat_desc" : "mat_asc")}
+                  >
+                    <span className="flex items-center gap-1">
+                      Matrícula
+                      <ArrowUpDown className="w-3 h-3 opacity-50" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer select-none hover:text-foreground"
+                    onClick={() => setSortBy("turma")}
+                  >
+                    <span className="flex items-center gap-1">
+                      Turma
+                      <ArrowUpDown className="w-3 h-3 opacity-50" />
+                    </span>
+                  </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-20">Ações</TableHead>
                 </TableRow>
@@ -293,10 +390,10 @@ export default function Alunos() {
             </p>
 
             <div className="space-y-2">
-              <Label>Arquivo (CSV ou XLSX)</Label>
+              <Label>Arquivo (CSV, XLSX ou PDF)</Label>
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx,.xls,.pdf"
                 onChange={handleFileChange}
                 className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-foreground"
               />

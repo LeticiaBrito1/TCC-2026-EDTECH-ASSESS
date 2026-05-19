@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import path from "path";
+import { fileURLToPath } from "url";
 import { env } from "./config/env.js";
 import { healthRoutes } from "./routes/healthRoutes.js";
 import { authRoutes } from "./routes/authRoutes.js";
@@ -13,6 +15,10 @@ import { correctionRoutes } from "./routes/correctionRoutes.js";
 import { notificationRoutes } from "./routes/notificationRoutes.js";
 import { authenticate } from "./middlewares/authMiddleware.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// dist/ fica na raiz do projeto (dois níveis acima de backend/src/)
+const DIST_PATH = path.join(__dirname, "../../dist");
 
 const app = express();
 
@@ -47,10 +53,20 @@ app.use(
   })
 );
 
-// Limite de corpo: 1 MB para JSON geral
+// Limite maior para OCR: envia imagem base64 de câmera (pode ter 3-8 MB)
+app.use("/api/corrections", express.json({ limit: "15mb" }));
+// Limite de corpo padrão para JSON geral
 app.use(express.json({ limit: "1mb" }));
 
-// Timeout de requisição: 60s (evita conexões penduradas)
+// Timeout maior para OCR: Groq Vision pode demorar com imagens grandes
+app.use("/api/corrections", (_req, res, next) => {
+  res.setTimeout(180_000, () => {
+    res.status(408).json({ error: "Análise da imagem expirou (timeout). Tente uma foto mais nítida ou com melhor iluminação." });
+  });
+  next();
+});
+
+// Timeout padrão: 60s para todas as outras rotas
 app.use((_req, res, next) => {
   res.setTimeout(60_000, () => {
     res.status(408).json({ error: "Requisição expirada (timeout)." });
@@ -84,6 +100,8 @@ app.use("/api", healthRoutes);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/resend-verification", authLimiter);
+app.use("/api/auth/forgot-password", authLimiter);
+app.use("/api/auth/reset-password", authLimiter);
 app.use("/api/auth/change-password", authLimiter);
 app.use("/api", authRoutes);
 
@@ -99,6 +117,12 @@ app.use("/api", auditRoutes);
 app.use("/api", integrationRoutes);
 app.use("/api", correctionRoutes);
 app.use("/api", notificationRoutes);
+
+// Frontend SPA — serve arquivos estáticos do build e redireciona rotas não-API para index.html
+app.use(express.static(DIST_PATH));
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(DIST_PATH, "index.html"));
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);

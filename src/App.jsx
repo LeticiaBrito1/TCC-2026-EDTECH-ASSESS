@@ -11,7 +11,7 @@ import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { ScanLine, Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { ScanLine, Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck, KeyRound } from "lucide-react";
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -77,7 +77,7 @@ const authPageWrapper = (children) => (
 );
 
 /* ─── Tela de Login ─── */
-const LoginScreen = ({ onGoToRegister }) => {
+const LoginScreen = ({ onGoToRegister, onGoToForgot }) => {
   const { login, isSubmittingLogin, authError, pendingVerificationEmail, clearPendingVerification } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -163,13 +163,192 @@ const LoginScreen = ({ onGoToRegister }) => {
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-500">
+      <p className="mt-4 text-center text-sm text-slate-500">
+        <button type="button" onClick={onGoToForgot}
+          className="font-semibold text-slate-600 hover:text-teal-700 hover:underline">
+          Esqueci minha senha
+        </button>
+      </p>
+
+      <p className="mt-2 text-center text-sm text-slate-500">
         Ainda não tem conta?{" "}
         <button type="button" onClick={onGoToRegister}
           className="font-semibold text-teal-700 hover:underline">
           Criar conta
         </button>
       </p>
+    </section>
+  );
+};
+
+/* ─── Tela de Esqueci a Senha ─── */
+const ForgotPasswordScreen = ({ onGoToLogin }) => {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | sending | sent
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setStatus("sending"); setErrorMsg("");
+    try {
+      await appClient.auth.forgotPassword(email.trim().toLowerCase());
+      setStatus("sent");
+    } catch (err) {
+      setErrorMsg(err?.message || "Falha ao enviar. Tente novamente.");
+      setStatus("idle");
+    }
+  };
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-cyan-50">
+        <KeyRound className="h-10 w-10 text-cyan-600" />
+      </div>
+      <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Recuperação</p>
+      <h2 className="text-3xl font-black text-slate-950 mb-3">Esqueci minha senha</h2>
+
+      {status === "sent" ? (
+        <>
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-teal-50">
+            <CheckCircle2 className="h-7 w-7 text-teal-600" />
+          </div>
+          <p className="text-slate-600 text-sm leading-relaxed mb-6">
+            Se o e-mail estiver cadastrado e verificado, você receberá um link para redefinir a senha em breve. Verifique também a pasta de spam.
+          </p>
+          <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Voltar para o login
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-slate-600 text-sm leading-relaxed mb-6">
+            Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha.
+          </p>
+          <form className="w-full space-y-4" onSubmit={handleSubmit}>
+            <div className="space-y-2 text-left">
+              <Label htmlFor="forgot-email">E-mail</Label>
+              <Input id="forgot-email" type="email" autoComplete="email"
+                placeholder="voce@escola.com" value={email}
+                onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            {errorMsg && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {errorMsg}
+              </div>
+            )}
+            <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
+              disabled={status === "sending" || !email.trim()}>
+              {status === "sending"
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</>
+                : "Enviar link de redefinição"}
+            </Button>
+          </form>
+          <button type="button" onClick={onGoToLogin}
+            className="mt-4 text-sm text-slate-500 hover:text-slate-800 hover:underline py-2">
+            Voltar para o login
+          </button>
+        </>
+      )}
+    </section>
+  );
+};
+
+/* ─── Tela de Redefinir Senha (via link do e-mail) ─── */
+const ResetPasswordScreen = ({ onGoToLogin }) => {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token") || "";
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [status, setStatus] = useState("idle"); // idle | sending | success | error
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (novaSenha.length < 8) { setErrorMsg("A senha deve ter no mínimo 8 caracteres."); return; }
+    if (!/[A-Za-z]/.test(novaSenha) || !/[0-9]/.test(novaSenha)) { setErrorMsg("A senha deve conter letras e números."); return; }
+    if (novaSenha !== confirmar) { setErrorMsg("As senhas não coincidem."); return; }
+    setStatus("sending");
+    try {
+      await appClient.auth.resetPassword(token, novaSenha);
+      setStatus("success");
+    } catch (err) {
+      setErrorMsg(err?.message || "Não foi possível redefinir a senha.");
+      setStatus("error");
+    }
+  };
+
+  if (!token) return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-red-50">
+        <XCircle className="h-10 w-10 text-red-500" />
+      </div>
+      <h2 className="text-3xl font-black text-slate-950 mb-3">Link inválido</h2>
+      <p className="text-slate-600 text-sm mb-8">O link de redefinição não contém um token válido.</p>
+      <Button variant="outline" className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+        Voltar para o login
+      </Button>
+    </section>
+  );
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-cyan-50">
+        <KeyRound className="h-10 w-10 text-cyan-600" />
+      </div>
+      <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Nova senha</p>
+      <h2 className="text-3xl font-black text-slate-950 mb-6">Redefinir senha</h2>
+
+      {status === "success" ? (
+        <>
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-teal-50">
+            <CheckCircle2 className="h-7 w-7 text-teal-600" />
+          </div>
+          <p className="text-slate-600 text-sm mb-8">Senha redefinida com sucesso! Faça login com a nova senha.</p>
+          <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Ir para o login
+          </Button>
+        </>
+      ) : (
+        <form className="w-full space-y-4 text-left" onSubmit={handleSubmit}>
+          <div className="space-y-2">
+            <Label htmlFor="rp-password">Nova senha</Label>
+            <div className="relative">
+              <Input id="rp-password" type={showPw ? "text" : "password"}
+                autoComplete="new-password" placeholder="Mín. 8 caracteres, letras e números"
+                value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
+              <button type="button" tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                onClick={() => setShowPw(v => !v)}>
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rp-confirm">Confirmar nova senha</Label>
+            <Input id="rp-confirm" type="password" autoComplete="new-password"
+              placeholder="Repita a nova senha" value={confirmar}
+              onChange={(e) => setConfirmar(e.target.value)} />
+          </div>
+          {errorMsg && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {errorMsg}
+            </div>
+          )}
+          <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
+            disabled={status === "sending" || !novaSenha || !confirmar}>
+            {status === "sending"
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</>
+              : "Salvar nova senha"}
+          </Button>
+          <button type="button" onClick={onGoToLogin}
+            className="w-full text-center text-sm text-slate-500 hover:text-slate-800 hover:underline py-1">
+            Cancelar
+          </button>
+        </form>
+      )}
     </section>
   );
 };
@@ -453,6 +632,7 @@ const VerifyEmailCallbackScreen = ({ onGoToLogin }) => {
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -462,18 +642,21 @@ const AuthenticatedApp = () => {
     );
   }
 
-  const goToLogin = () => { setShowRegister(false); };
+  const goToLogin = () => { setShowRegister(false); setShowForgot(false); };
 
   // Só exibe o app principal se o usuário estiver autenticado
   if (!isAuthenticated) {
     if (authError?.type === 'user_not_registered') return <UserNotRegisteredError />;
     if (authError?.type === 'verify_email_pending') return <VerifyEmailPendingScreen onGoToLogin={goToLogin} />;
-    if (authError?.type === 'email_not_verified') return <LoginScreen onGoToRegister={() => setShowRegister(true)} />;
     if (authError?.type === 'login_code_required' || authError?.type === 'login_code_failed') {
       return <LoginCodeScreen onCancel={goToLogin} />;
     }
+    if (showForgot) return <ForgotPasswordScreen onGoToLogin={goToLogin} />;
     if (showRegister) return <RegisterScreen onGoToLogin={goToLogin} />;
-    return <LoginScreen onGoToRegister={() => setShowRegister(true)} />;
+    if (authError?.type === 'email_not_verified') {
+      return <LoginScreen onGoToRegister={() => setShowRegister(true)} onGoToForgot={() => setShowForgot(true)} />;
+    }
+    return <LoginScreen onGoToRegister={() => setShowRegister(true)} onGoToForgot={() => setShowForgot(true)} />;
   }
 
   return (
@@ -505,6 +688,10 @@ const AppRouter = () => {
           clearPendingVerification();
           navigate("/");
         }} />
+      } />
+      {/* Rota pública de redefinição de senha */}
+      <Route path="/reset-password" element={
+        <ResetPasswordScreen onGoToLogin={() => navigate("/")} />
       } />
       {/* Todas as demais rotas passam pelo fluxo de autenticação */}
       <Route path="/*" element={<AuthenticatedApp />} />

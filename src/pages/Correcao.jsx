@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp } from "lucide-react";
+import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp, ClipboardPaste, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
@@ -26,20 +27,26 @@ const getFirstValue = (obj, keys) => {
 };
 
 const parseQrPayload = (rawValue) => {
-  const raw = String(rawValue || "").trim();
+  // Remove TODO whitespace (espaços, quebras de linha, tabs) que surgem ao copiar texto do PDF.
+  // UUIDs e letras de versão nunca contêm espaços, então isso é seguro.
+  const raw = String(rawValue || "").replace(/\s/g, "");
   if (!raw) return null;
 
   const buildResult = (obj) => {
-    const avaliacaoId = getFirstValue(obj, AVALIACAO_KEYS);
-    const alunoId = getFirstValue(obj, ALUNO_KEYS);
+    // Limpa espaços residuais de cada valor individual, por precaução.
+    const clean = (v) => String(v || "").replace(/\s/g, "");
+    const avaliacaoId = clean(getFirstValue(obj, AVALIACAO_KEYS));
+    const alunoId = clean(getFirstValue(obj, ALUNO_KEYS));
     if (!avaliacaoId || !alunoId) return null;
     const versao = getFirstValue(obj, VERSAO_KEYS);
     return { avaliacaoId, alunoId, versao };
   };
 
-  if (raw.startsWith("{") && raw.endsWith("}")) {
+  if (raw.startsWith("{")) {
+    // Auto-completa `}` se o usuário copiou o JSON incompleto do PDF.
+    const jsonStr = raw.endsWith("}") ? raw : raw + "}";
     try {
-      const parsedJson = JSON.parse(raw);
+      const parsedJson = JSON.parse(jsonStr);
       const result = buildResult(parsedJson);
       if (result) return result;
     } catch {
@@ -72,14 +79,38 @@ export default function Correcao() {
   const [respostas, setRespostas] = useState({});
   const [correcting, setCorrecting] = useState(false);
   const [result, setResult] = useState(null);
+  const [ocrDetected, setOcrDetected] = useState(null);
   const [qrFeedback, setQrFeedback] = useState(null);
+  const [qrPasteValue, setQrPasteValue] = useState("");
   const [ocrFile, setOcrFile] = useState(null);
+  const [ocrError, setOcrError] = useState(null);
+  const [pasteHighlight, setPasteHighlight] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  // Ctrl+V / Cmd+V — cola imagem do clipboard diretamente na área de upload
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageItem = items.find((item) => item.type.startsWith("image/"));
+      if (!imageItem) return;
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      setOcrFile(file);
+      setResult(null);
+      setOcrDetected(null);
+      setOcrError(null);
+      setPasteHighlight(true);
+      setTimeout(() => setPasteHighlight(false), 1200);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
 
   const { data: avaliacoes = [] } = useQuery({ queryKey: ["avaliacoes"], queryFn: () => appClient.entities.Avaliacao.list() });
   const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
   const { data: questoes = [] } = useQuery({ queryKey: ["questoes"], queryFn: () => appClient.entities.Questao.list() });
+  const { data: resultados = [] } = useQuery({ queryKey: ["resultados"], queryFn: () => appClient.entities.Resultado.list() });
 
   const createResult = useMutation({
     mutationFn: (d) => appClient.entities.Resultado.create(d),
@@ -90,24 +121,29 @@ export default function Correcao() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["resultados"] });
       setResult(data.resultado);
-      setQrFeedback({
-        type: "success",
-        message: "Correção automática por OCR concluída e salva.",
-      });
+      setOcrDetected(data.detected || null);
       setOcrFile(null);
     },
     onError: (error) => {
-      toast({
-        title: "Falha no OCR",
-        description: error?.message || "Não foi possível corrigir pela imagem.",
-        variant: "destructive",
-      });
+      setOcrError(error?.message || "Não foi possível corrigir pela imagem.");
     },
   });
 
   const avaliacao = avaliacoes.find(a => a.id === selectedAvaliacao);
-  const alunosFiltrados = avaliacao ? alunos.filter(a => a.turma_id === avaliacao.turma_id) : [];
+  const alunosFiltrados = (avaliacao
+    ? (avaliacao.turma_id ? alunos.filter(a => a.turma_id === avaliacao.turma_id) : alunos)
+    : []
+  ).slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR"));
   const questoesAvaliacao = avaliacao?.questoes_ids?.map(id => questoes.find(q => q.id === id)).filter(Boolean) || [];
+
+  // IDs dos alunos que já tiveram essa avaliação corrigida
+  const alunosJaCorrigidosIds = new Set(
+    resultados.filter(r => r.avaliacao_id === selectedAvaliacao).map(r => r.aluno_id)
+  );
+  // Resultado existente para a combinação atual
+  const jaCorrigida = selectedAvaliacao && selectedAluno
+    ? resultados.find(r => r.avaliacao_id === selectedAvaliacao && r.aluno_id === selectedAluno)
+    : null;
 
   const handleCorrigir = async () => {
     if (!selectedAvaliacao || !selectedAluno) return;
@@ -158,36 +194,32 @@ export default function Correcao() {
     });
 
   const handleOcrCorrection = async () => {
-    if (!selectedAvaliacao || !selectedAluno) {
-      toast({
-        title: "Seleção obrigatória",
-        description: "Selecione avaliação e aluno antes de corrigir por OCR.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!ocrFile) {
       toast({
         title: "Imagem obrigatória",
-        description: "Selecione uma imagem da folha de respostas.",
+        description: "Selecione uma foto do cartão resposta.",
         variant: "destructive",
       });
       return;
     }
 
     const base64 = await fileToBase64(ocrFile);
-    await correctByOcr.mutateAsync({
-      avaliacao_id: selectedAvaliacao,
-      aluno_id: selectedAluno,
-      image_base64: base64,
-    });
+    // Envia IDs apenas se o professor já tiver selecionado manualmente.
+    // Se não, o backend extrai avaliação e aluno da imagem automaticamente.
+    const payload = { image_base64: base64 };
+    if (selectedAvaliacao) payload.avaliacao_id = selectedAvaliacao;
+    if (selectedAluno) payload.aluno_id = selectedAluno;
+
+    await correctByOcr.mutateAsync(payload);
   };
 
   const resetCorrecao = () => {
     setResult(null);
+    setOcrDetected(null);
+    setOcrError(null);
     setRespostas({});
     setSelectedAluno("");
+    setOcrFile(null);
   };
 
   const handleQrDecoded = (decodedValue) => {
@@ -254,12 +286,43 @@ export default function Correcao() {
                   <Label>Aluno</Label>
                   <Select value={selectedAluno} onValueChange={setSelectedAluno} disabled={!selectedAvaliacao}>
                     <SelectTrigger><SelectValue placeholder="Selecione o aluno" /></SelectTrigger>
-                    <SelectContent>{alunosFiltrados.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {alunosFiltrados.map(a => (
+                        <SelectItem key={a.id} value={a.id}>
+                          <span className="flex items-center gap-2">
+                            {alunosJaCorrigidosIds.has(a.id) && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
+                            )}
+                            {a.nome}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Aviso: prova já corrigida */}
+          {jaCorrigida && (
+            <Card className="border-warning/40 bg-warning/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-semibold text-warning">Esta prova já foi corrigida</p>
+                    <p className="text-sm text-muted-foreground">
+                      {alunos.find(a => a.id === selectedAluno)?.nome} obteve{" "}
+                      <strong>{jaCorrigida.nota}</strong> pts —{" "}
+                      <strong>{jaCorrigida.total_acertos}/{jaCorrigida.total_questoes}</strong> acertos ({jaCorrigida.percentual_acerto}%).
+                    </p>
+                    <p className="text-xs text-muted-foreground">Você pode corrigir novamente e o resultado anterior será substituído.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -273,6 +336,30 @@ export default function Correcao() {
                 Escaneie o QR da prova para preencher avaliação e aluno automaticamente.
               </p>
               <QrCodeScanner onDecoded={handleQrDecoded} />
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs flex items-center gap-1.5 text-muted-foreground">
+                  <ClipboardPaste className="w-3.5 h-3.5" />
+                  Ou cole o conteúdo do QR Code
+                </Label>
+                <div className="flex gap-2">
+                  <Textarea
+                    rows={2}
+                    className="text-xs font-mono resize-none"
+                    placeholder='{"avaliacao_id":"...","aluno_id":"..."}'
+                    value={qrPasteValue}
+                    onChange={e => setQrPasteValue(e.target.value)}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 self-end"
+                    onClick={() => { handleQrDecoded(qrPasteValue); setQrPasteValue(""); }}
+                    disabled={!qrPasteValue.trim()}
+                  >
+                    Aplicar
+                  </Button>
+                </div>
+              </div>
               {qrFeedback && (
                 <p className={`text-sm ${qrFeedback.type === "success" ? "text-success" : "text-destructive"}`}>
                   {qrFeedback.message}
@@ -281,27 +368,85 @@ export default function Correcao() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-primary/30 bg-primary/5">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <ImageUp className="w-5 h-5 text-primary" />
-                Correção Automática por OCR
+                Correção Automática por Foto
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Faça upload da foto da folha de respostas para tentar correção automática.
+                Tire uma foto do <strong>cartão resposta</strong> do aluno. A IA identifica automaticamente
+                a avaliação, o aluno e as respostas marcadas — sem seleção manual.
               </p>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setOcrFile(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-foreground"
-              />
-              <Button onClick={handleOcrCorrection} disabled={correctByOcr.isPending}>
-                {correctByOcr.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImageUp className="w-4 h-4 mr-2" />}
-                {correctByOcr.isPending ? "Processando OCR..." : "Corrigir por OCR"}
+
+              {/* Área de upload */}
+              <label
+                className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200
+                  ${pasteHighlight
+                    ? "border-success bg-success/10 scale-[1.01]"
+                    : "border-primary/30 hover:bg-primary/10"
+                  }`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => { setOcrFile(e.target.files?.[0] || null); setResult(null); setOcrDetected(null); setOcrError(null); }}
+                />
+                {ocrFile ? (
+                  <div className="text-center px-4">
+                    <ImageUp className="w-6 h-6 text-primary mx-auto mb-1" />
+                    <p className="text-sm font-medium text-foreground truncate max-w-[220px]">
+                      {ocrFile.name || "Imagem colada"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Clique para trocar</p>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-1">
+                    <ImageUp className="w-8 h-8 text-primary/50 mx-auto" />
+                    <p className="text-sm text-muted-foreground">Clique, arraste ou <kbd className="px-1.5 py-0.5 text-xs font-mono bg-muted rounded border">Ctrl+V</kbd></p>
+                    <p className="text-xs text-muted-foreground">Aceita foto tirada, print ou captura de tela</p>
+                  </div>
+                )}
+              </label>
+
+              {pasteHighlight && (
+                <p className="text-xs text-success font-medium text-center">Imagem colada com sucesso!</p>
+              )}
+
+              <Button
+                onClick={handleOcrCorrection}
+                disabled={correctByOcr.isPending || !ocrFile}
+                className="w-full"
+              >
+                {correctByOcr.isPending
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando imagem...</>
+                  : <><ImageUp className="w-4 h-4 mr-2" />Corrigir automaticamente</>
+                }
               </Button>
+
+              {ocrError && (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <p className="text-sm text-destructive font-medium">{ocrError}</p>
+                  </div>
+                  {(ocrError.includes("avalia") || ocrError.includes("aluno")) && (
+                    <p className="text-xs text-muted-foreground pl-6">
+                      Selecione a <strong>avaliação</strong> e o <strong>aluno</strong> nos campos acima
+                      (ou escaneie o QR Code da prova) e clique em "Corrigir automaticamente" novamente.
+                      Assim a IA foca apenas em ler as marcações do cartão.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground text-center">
+                Se a IA não identificar automaticamente a prova ou o aluno, selecione-os acima e tente novamente.
+              </p>
             </CardContent>
           </Card>
 
@@ -370,9 +515,17 @@ export default function Correcao() {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-foreground">Correção Concluída</h2>
-              <p className="text-muted-foreground mt-1">
-                {alunos.find(a => a.id === selectedAluno)?.nome} — {avaliacao?.titulo}
-              </p>
+              {ocrDetected ? (
+                <div className="mt-2 inline-flex flex-col items-center gap-0.5">
+                  <p className="text-sm font-medium text-foreground">{ocrDetected.aluno_nome}</p>
+                  <p className="text-xs text-muted-foreground">{ocrDetected.avaliacao_titulo}{ocrDetected.versao ? ` — Versão ${ocrDetected.versao}` : ""}</p>
+                  <span className="text-xs text-primary mt-1">Identificado automaticamente pela IA</span>
+                </div>
+              ) : (
+                <p className="text-muted-foreground mt-1">
+                  {alunos.find(a => a.id === selectedAluno)?.nome} — {avaliacao?.titulo}
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-md mx-auto">
               <div className="p-4 rounded-xl bg-primary/10">

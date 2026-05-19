@@ -33,12 +33,16 @@ export default function Relatorios() {
 
   const filteredResults = useMemo(() => {
     return resultados.filter(r => {
-      if (filterTurma !== "all" && r.turma_id !== filterTurma) return false;
+      if (filterTurma !== "all") {
+        const alunoDoResult = alunos.find(a => a.id === r.aluno_id);
+        const turmaEfetiva = r.turma_id || alunoDoResult?.turma_id;
+        if (turmaEfetiva !== filterTurma) return false;
+      }
       if (filterAvaliacao !== "all" && r.avaliacao_id !== filterAvaliacao) return false;
       if (filterAluno !== "all" && r.aluno_id !== filterAluno) return false;
       return true;
     });
-  }, [resultados, filterTurma, filterAvaliacao, filterAluno]);
+  }, [resultados, filterTurma, filterAvaliacao, filterAluno, alunos]);
 
   const stats = useMemo(() => {
     if (filteredResults.length === 0) return { media: 0, max: 0, min: 0, aprovados: 0, total: 0 };
@@ -130,20 +134,22 @@ export default function Relatorios() {
     URL.revokeObjectURL(url);
   };
 
-  const buildExportRows = () =>
-    filteredResults.map((r) => {
+  const buildExportRows = () => {
+    const source = filteredResults.length > 0 ? filteredResults : resultados;
+    return source.map((r) => {
       const aluno = alunos.find((a) => a.id === r.aluno_id);
       const avaliacao = avaliacoes.find((a) => a.id === r.avaliacao_id);
-      const turma = turmas.find((t) => t.id === r.turma_id);
+      const turmaEfetiva = turmas.find((t) => t.id === (r.turma_id || aluno?.turma_id));
       return {
         Aluno: aluno?.nome || "—",
-        Turma: turma?.nome || "—",
+        Turma: turmaEfetiva?.nome || "—",
         Avaliacao: avaliacao?.titulo || "—",
         Nota: r.nota ?? 0,
         Acertos: `${r.total_acertos ?? 0}/${r.total_questoes ?? 0}`,
         Percentual: `${r.percentual_acerto ?? 0}%`,
       };
     });
+  };
 
   const exportCSV = () => {
     const rows = buildExportRows();
@@ -316,13 +322,13 @@ export default function Relatorios() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button variant="outline" onClick={exportCSV} disabled={filteredResults.length === 0}>
+            <Button variant="outline" onClick={exportCSV} disabled={resultados.length === 0}>
               <Download className="w-4 h-4 mr-2" />CSV
             </Button>
-            <Button variant="outline" onClick={exportXLSX} disabled={filteredResults.length === 0}>
+            <Button variant="outline" onClick={exportXLSX} disabled={resultados.length === 0}>
               <FileSpreadsheet className="w-4 h-4 mr-2" />XLSX
             </Button>
-            <Button variant="outline" onClick={exportPDF} disabled={filteredResults.length === 0}>
+            <Button variant="outline" onClick={exportPDF} disabled={resultados.length === 0}>
               <FileText className="w-4 h-4 mr-2" />PDF
             </Button>
           </div>

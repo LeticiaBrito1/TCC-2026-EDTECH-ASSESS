@@ -59,6 +59,7 @@ const Avaliacoes = lazy(() => import('./pages/Avaliacoes'));
 const Correcao = lazy(() => import('./pages/Correcao'));
 const Relatorios = lazy(() => import('./pages/Relatorios'));
 const Perfil = lazy(() => import('./pages/Perfil'));
+const Pagamento = lazy(() => import('./pages/Pagamento'));
 
 
 export const PAGES = {
@@ -71,6 +72,7 @@ export const PAGES = {
     "Correcao": Correcao,
     "Relatorios": Relatorios,
     "Perfil": Perfil,
+    "Pagamento": Pagamento,
 }
 
 export const pagesConfig = {

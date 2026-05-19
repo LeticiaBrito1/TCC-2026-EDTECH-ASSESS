@@ -63,6 +63,10 @@ const runMigrations = async (query) => {
   await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS login_code TEXT;`);
   await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS login_code_expires TIMESTAMPTZ;`);
 
+  // Migração incremental: redefinição de senha
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;`);
+
   await query(`
     CREATE TABLE IF NOT EXISTS app_audit_logs (
       id UUID PRIMARY KEY,
