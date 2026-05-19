@@ -31,12 +31,12 @@ const C = {
 
 // ─── Mapa de sub-páginas do tab "Mais" ───────────────────────────────────────
 const MAIS_PAGES = {
-  Turmas:      { label: "Turmas",           icon: "🏫", Component: TurmasScreen },
-  Disciplinas: { label: "Disciplinas",      icon: "📚", Component: DisciplinasScreen },
-  Questoes:    { label: "Questões",         icon: "❓", Component: QuestoesScreen },
-  Relatorios:  { label: "Relatórios",       icon: "📊", Component: RelatoriosScreen },
-  Perfil:      { label: "Perfil",           icon: "👤", Component: PerfilScreen },
-  Pagamento:   { label: "Plano & Pagamento",icon: "⭐", Component: PagamentoScreen },
+  Turmas:      { label: "Turmas",           icon: "school-outline",       Component: TurmasScreen },
+  Disciplinas: { label: "Disciplinas",      icon: "book-outline",         Component: DisciplinasScreen },
+  Questoes:    { label: "Questões",         icon: "help-circle-outline",  Component: QuestoesScreen },
+  Relatorios:  { label: "Relatórios",       icon: "bar-chart-outline",    Component: RelatoriosScreen },
+  Perfil:      { label: "Perfil",           icon: "person-circle-outline",Component: PerfilScreen },
+  Pagamento:   { label: "Plano & Pagamento",icon: "card-outline",         Component: PagamentoScreen },
 };
 
 // ─── Tab "Mais" com roteamento por estado ────────────────────────────────────
@@ -82,9 +82,11 @@ function MaisTab({ token, user, onLogout, onUserUpdate }) {
                 alignItems: "center", gap: 14, opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text style={{ fontSize: 24 }}>{icon}</Text>
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#f0fdfb", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name={icon} size={22} color={C.primary} />
+              </View>
               <Text style={{ fontSize: 16, fontWeight: "700", color: C.dark, flex: 1 }}>{label}</Text>
-              <Text style={{ color: C.muted, fontSize: 20 }}>›</Text>
+              <Ionicons name="chevron-forward" size={18} color={C.muted} />
             </Pressable>
           ))}
         </View>
@@ -96,7 +98,9 @@ function MaisTab({ token, user, onLogout, onUserUpdate }) {
           ])}
           style={{ marginTop: 20, backgroundColor: "#fef2f2", borderRadius: 14, borderWidth: 1, borderColor: "#fecaca", padding: 16, flexDirection: "row", alignItems: "center", gap: 14 }}
         >
-          <Text style={{ fontSize: 24 }}>🚪</Text>
+          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#fee2e2", alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="log-out-outline" size={22} color={C.danger} />
+          </View>
           <Text style={{ fontSize: 16, fontWeight: "700", color: C.danger }}>Sair da conta</Text>
         </Pressable>
       </ScrollView>

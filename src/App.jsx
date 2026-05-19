@@ -39,8 +39,8 @@ const RouteElement = ({ Page, currentPageName }) => (
 /* ─── Hero lateral (compartilhado entre Login e Cadastro) ─── */
 const AuthHero = () => (
   <section className="rounded-[2rem] bg-slate-950 px-8 py-10 text-white shadow-2xl shadow-slate-950/20">
-    <div className="mb-10 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/20">
-      <img src="/logoEDTECH.png" alt="EdTech Assess" className="h-9 w-9 object-contain" />
+    <div className="mb-10 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-lg">
+      <img src="/logoEDTECH.png" alt="EdTech Assess" className="h-14 w-14 object-contain" />
     </div>
     <p className="mb-4 text-xs font-bold uppercase tracking-[0.35em] text-cyan-300">EdTech Assess</p>
     <h1 className="max-w-lg text-4xl font-black leading-tight sm:text-5xl">

@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { View, Text, ScrollView, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { S, C } from "../components/AppStyles";
 import { apiList } from "../api/client";
 
@@ -37,9 +38,9 @@ export default function DashboardScreen({ token, user }) {
 
   // Apenas 3 cards — Turmas e Relatórios estão no tab "Mais", Alunos é tab direto
   const stats = [
-    { label: "Turmas",    value: data.turmas.length,    tab: "Mais",   icon: "🏫" },
-    { label: "Alunos",    value: data.alunos.length,    tab: "Alunos", icon: "👩‍🎓" },
-    { label: "Relatórios",value: data.resultados.length,tab: "Mais",   icon: "📊" },
+    { label: "Turmas",    value: data.turmas.length,    tab: "Mais",   icon: "school-outline" },
+    { label: "Alunos",    value: data.alunos.length,    tab: "Alunos", icon: "people-outline" },
+    { label: "Relatórios",value: data.resultados.length,tab: "Mais",   icon: "bar-chart-outline" },
   ];
 
   return (
@@ -74,7 +75,9 @@ export default function DashboardScreen({ token, user }) {
               })}
               onPress={() => navigation.navigate(s.tab)}
             >
-              <Text style={{ fontSize: 28 }}>{s.icon}</Text>
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "#f0fdfb", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name={s.icon} size={26} color={C.primary} />
+              </View>
               <Text style={{ fontSize: 30, fontWeight: "900", color: C.primary }}>{s.value}</Text>
               <Text style={{ fontSize: 13, color: C.muted, fontWeight: "600", textAlign: "center" }}>{s.label}</Text>
             </Pressable>
