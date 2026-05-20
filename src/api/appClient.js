@@ -59,6 +59,7 @@ const request = async (
   const token = getAuthToken();
   const headers = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "1",
   };
 
   if (!skipAuth && token) {
