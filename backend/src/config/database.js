@@ -174,6 +174,8 @@ const createPostgresPool = async () => {
   const pool = new PgPool({
     connectionString: env.databaseUrl,
     ssl: env.pgSsl ? { rejectUnauthorized: false } : undefined,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
   });
 
   await pool.query("SELECT 1");
