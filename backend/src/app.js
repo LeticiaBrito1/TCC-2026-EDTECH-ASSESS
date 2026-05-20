@@ -35,11 +35,8 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) {
-        // Sem origin: aceito em dev (curl, Postman); bloqueado em produção
-        if (env.nodeEnv === "production") {
-          callback(new Error("Origem não permitida pelo CORS."));
-          return;
-        }
+        // Sem origin: requisições server-to-server (healthcheck, curl, Postman)
+        // CORS é mecanismo do navegador — não se aplica a essas requisições
         callback(null, true);
         return;
       }
