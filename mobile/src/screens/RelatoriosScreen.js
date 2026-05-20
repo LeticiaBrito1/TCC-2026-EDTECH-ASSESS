@@ -33,7 +33,6 @@ export default function RelatoriosScreen({ token }) {
 
   React.useEffect(() => { load(); }, [load]);
 
-  const getAvaliacao = (id) => avaliacoes.find(a => a.id === id);
   const getAluno = (id) => alunos.find(a => a.id === id);
   const getTurma = (id) => turmas.find(t => t.id === id);
 

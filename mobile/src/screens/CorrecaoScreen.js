@@ -9,7 +9,6 @@ import { parseQrPayload } from "../utils/qrParser";
 
 const LETRAS = ["A", "B", "C", "D", "E"];
 const STATUS_LABELS = { rascunho: "Rascunho", publicada: "Publicada", aplicada: "Aplicada", corrigida: "Corrigida" };
-const shortId = (v) => { const s = String(v || "").trim(); return s.length <= 18 ? s : `${s.slice(0, 8)}...${s.slice(-6)}`; };
 const buildImagePayload = (asset) => {
   const b64 = String(asset?.base64 || "").trim();
   if (!b64) throw new Error("A imagem precisa estar em base64.");
@@ -49,7 +48,7 @@ export default function CorrecaoScreen({ token }) {
 
   const [avaliacaoId, setAvaliacaoId] = useState("");
   const [alunoId, setAlunoId] = useState("");
-  const [versao, setVersao] = useState("");
+  const [_versao, setVersao] = useState("");
   const [correctionMode, setCorrectionMode] = useState("ocr");
   const [manualRespostas, setManualRespostas] = useState({});
   const [imageAsset, setImageAsset] = useState(null);
