@@ -7,7 +7,8 @@ import { HttpError } from "../utils/httpError.js";
 import { env } from "../config/env.js";
 
 const LETTER_OPTIONS = new Set(["A", "B", "C", "D", "E"]);
-const GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+const GROQ_VISION_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct";
+const GROQ_VISION_FALLBACK = "meta-llama/llama-4-scout-17b-16e-instruct";
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUuid = (v) => UUID_REGEX.test(String(v || ""));
 
@@ -84,30 +85,40 @@ const parseAnswersFromText = (rawText, totalQuestions) => {
 // Extrai: avaliacao_id, aluno_id, versao E respostas das bolhas em uma chamada.
 // ---------------------------------------------------------------------------
 
-const runVisionFull = async (dataUrl, hintTotal) => {
+const buildVisionPrompt = (hintTotal) =>
+  `Você está analisando uma FOLHA DE RESPOSTAS de prova escolar.
+
+ESTRUTURA DA FOLHA:
+- Cada questão tem 5 círculos na mesma linha, rotulados da ESQUERDA para DIREITA: A, B, C, D, E
+- A = 1º círculo (mais à esquerda)
+- B = 2º círculo
+- C = 3º círculo (centro)
+- D = 4º círculo
+- E = 5º círculo (mais à direita)
+- O aluno preencheu/escureceu apenas UM círculo por questão
+- Círculos não marcados estão vazios ou apenas com a borda
+
+TAREFA 1 — Identificação:
+Localize o JSON impresso junto ao QR Code:
+{"avaliacao_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","aluno_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","versao":"A"}
+REGRAS: UUID = exatamente 36 chars (8-4-4-4-12, hex). Se não ler o UUID completo → null. Nunca invente.
+
+TAREFA 2 — Respostas (questões 1 a ${hintTotal}):
+Para CADA questão, conte os círculos da esquerda e identifique qual está escurecido.
+Seja meticuloso: uma marcação leve já conta. Se dois estiverem marcados, escolha o mais escuro.
+Se nenhum estiver marcado, omita a questão do JSON.
+
+Responda SOMENTE com JSON válido (sem markdown, sem explicação):
+{"avaliacao_id":"uuid ou null","aluno_id":"uuid ou null","versao":"letra ou null","respostas":{"1":"B","2":"A","3":"C",...}}`;
+
+const runVisionFull = async (dataUrl, hintTotal, model = GROQ_VISION_MODEL) => {
   if (!groqVision) return null;
 
-  const prompt =
-    `Você está analisando um cartão resposta de prova escolar.\n\n` +
-    `TAREFA 1 — Código de identificação (JSON impresso próximo ao QR Code):\n` +
-    `Localize o bloco de texto JSON impresso junto ao QR Code. Ele tem este formato:\n` +
-    `{"avaliacao_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","aluno_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","versao":"A"}\n` +
-    `Os UUIDs têm EXATAMENTE 36 caracteres no padrão 8-4-4-4-12 ` +
-    `(somente dígitos 0-9 e letras a-f, separados por hífens na posição certa).\n` +
-    `REGRAS CRÍTICAS:\n` +
-    `- Se não conseguir ler um UUID COMPLETO e correto (todos os 36 chars), retorne null para esse campo.\n` +
-    `- NÃO invente, complete, adivinhe nem substitua caracteres por dígitos de outras partes do formulário.\n` +
-    `- Número de matrícula, código de turma ou qualquer outro número do formulário NÃO é UUID — ignore.\n\n` +
-    `TAREFA 2 — Respostas marcadas:\n` +
-    `Na seção "Folha de Respostas", identifique qual círculo está marcado/preenchido ` +
-    `com caneta ou lápis para cada questão numerada (de 1 a ${hintTotal || "N"}).\n\n` +
-    `Responda SOMENTE com JSON válido neste formato (sem markdown, sem texto extra):\n` +
-    `{"avaliacao_id":"uuid ou null","aluno_id":"uuid ou null","versao":"letra ou null",` +
-    `"respostas":{"1":"B","2":"A","3":"C"}}`;
+  const prompt = buildVisionPrompt(hintTotal || "N");
 
   try {
     const response = await groqVision.chat.completions.create({
-      model: GROQ_VISION_MODEL,
+      model,
       max_tokens: 1024,
       temperature: 0,
       messages: [
@@ -122,14 +133,12 @@ const runVisionFull = async (dataUrl, hintTotal) => {
     });
 
     const raw = response.choices?.[0]?.message?.content || "";
-    console.log("[vision] resposta bruta:", raw.slice(0, 600));
+    console.log(`[vision:${model}] resposta bruta:`, raw.slice(0, 600));
 
-    // Extrai o primeiro bloco JSON da resposta (o modelo pode adicionar texto ao redor)
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return null;
 
     const parsed = JSON.parse(match[0]);
-
     const clean = (v) => (typeof v === "string" ? v.replace(/\s/g, "") : null);
 
     const respostasMap = {};
@@ -156,7 +165,7 @@ const runVisionFull = async (dataUrl, hintTotal) => {
       respostasMap,
     };
   } catch (err) {
-    console.warn("[vision] Falha no modelo de visão:", err.message);
+    console.warn(`[vision:${model}] Falha:`, err.message);
     return null;
   }
 };
@@ -222,25 +231,35 @@ export const correctionService = {
     let answerMap = {};
     let ocrSource = "provided";
 
-    // --- Passo 1: Processar imagem se fornecida ---
+    // --- Passo 1: Pré-carregar avaliação se ID já conhecido (para ter total de questões) ---
+    let questionHint = null;
+    if (detectedAvaliacaoId && isValidUuid(detectedAvaliacaoId)) {
+      const preAvaliacao = await entityRepository.getById("avaliacoes", detectedAvaliacaoId, actor);
+      if (preAvaliacao?.questoes_ids?.length) questionHint = preAvaliacao.questoes_ids.length;
+    }
+
+    // --- Passo 2: Processar imagem se fornecida ---
     if (imageBase64) {
       const { buffer, dataUrl } = decodeImage(imageBase64);
 
-      // Tenta Groq Vision (lê identificação + bolhas em uma chamada)
-      const visionResult = await runVisionFull(dataUrl, null);
+      // Tenta modelo principal com hint do total de questões
+      let visionResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_MODEL);
+
+      // Fallback para modelo secundário se o principal falhou
+      if (!visionResult) {
+        console.log("[vision] Tentando modelo fallback...");
+        visionResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_FALLBACK);
+      }
 
       if (visionResult) {
         ocrSource = "groq-vision";
-        // Usa IDs detectados na imagem apenas se não foram fornecidos explicitamente
         if (!detectedAvaliacaoId && visionResult.avaliacaoId) detectedAvaliacaoId = visionResult.avaliacaoId;
         if (!detectedAlunoId && visionResult.alunoId) detectedAlunoId = visionResult.alunoId;
         detectedVersao = visionResult.versao;
         answerMap = visionResult.respostasMap;
       } else {
-        // Fallback: Tesseract para texto + parse manual
         const tesseractText = await runTesseract(buffer);
         ocrSource = "tesseract";
-        // Tesseract não extrai IDs, mas pode extrair respostas se digitadas
         answerMap = parseAnswersFromText(tesseractText, 99);
       }
     } else if (recognizedText) {
@@ -248,7 +267,7 @@ export const correctionService = {
       ocrSource = "text";
     }
 
-    // --- Passo 2: Validar que temos IDs no formato correto ---
+    // --- Passo 3: Validar IDs ---
     if (!detectedAvaliacaoId || !isValidUuid(detectedAvaliacaoId)) {
       throw new HttpError(
         422,
@@ -267,7 +286,7 @@ export const correctionService = {
       );
     }
 
-    // --- Passo 3: Carregar entidades do banco ---
+    // --- Passo 4: Carregar entidades do banco ---
     const avaliacao = await entityRepository.getById("avaliacoes", detectedAvaliacaoId, actor);
     if (!avaliacao) throw new HttpError(404, `Avaliação (${detectedAvaliacaoId}) não encontrada.`);
 
@@ -287,10 +306,11 @@ export const correctionService = {
 
     if (questions.length === 0) throw new HttpError(400, "Nenhuma questão vinculada foi encontrada.");
 
-    // --- Passo 4: Se vision falhou nas respostas, tenta novamente com hint do total ---
+    // --- Passo 5: Se vision não retornou respostas, retry com total exato ---
     if (Object.keys(answerMap).length === 0 && imageBase64 && ocrSource === "groq-vision") {
       const { dataUrl } = decodeImage(imageBase64);
-      const retry = await runVisionFull(dataUrl, questions.length);
+      const retry = await runVisionFull(dataUrl, questions.length, GROQ_VISION_MODEL)
+        || await runVisionFull(dataUrl, questions.length, GROQ_VISION_FALLBACK);
       if (retry) answerMap = retry.respostasMap;
     }
 
@@ -302,7 +322,7 @@ export const correctionService = {
       );
     }
 
-    // --- Passo 5: Montar e salvar correção ---
+    // --- Passo 6: Montar e salvar correção ---
     const correctionPayload = buildCorrection({ avaliacao, aluno, questions, answerMap });
     const createdResult = await entityService.create("resultados", correctionPayload, actor);
 
