@@ -18,6 +18,7 @@ const createTransporter = () => {
     },
     connectionTimeout: 15_000,
     greetingTimeout: 10_000,
+    family: 4, // forçar IPv4 (Railway não suporta IPv6 para SMTP)
   });
 };
 

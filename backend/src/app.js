@@ -22,6 +22,10 @@ const DIST_PATH = path.join(__dirname, "../../dist");
 
 const app = express();
 
+// Trust proxy: necessário no Railway (e qualquer reverse proxy) para que
+// express-rate-limit leia o IP real do X-Forwarded-For sem lançar ValidationError
+app.set("trust proxy", 1);
+
 // Health check — antes do CORS para que o Railway consiga verificar sem Origin header
 app.use("/api", healthRoutes);
 
