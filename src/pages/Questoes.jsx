@@ -15,7 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
-import { extractTextFromFile, ACCEPTED_FILE_TYPES, ACCEPTED_FILE_LABEL } from "@/lib/fileTextExtractor";
+import { extractTextFromFile, ACCEPTED_FILE_TYPES } from "@/lib/fileTextExtractor";
 
 const DIFICULDADES = { facil: "Fácil", medio: "Médio", dificil: "Difícil" };
 const LETRAS = ["A", "B", "C", "D", "E"];

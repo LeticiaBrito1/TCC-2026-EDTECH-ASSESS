@@ -27,7 +27,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
 import { generateAssessmentPdf } from "@/lib/assessmentPdfGenerator";
-import { extractTextFromFile, ACCEPTED_FILE_TYPES, ACCEPTED_FILE_LABEL } from "@/lib/fileTextExtractor";
+import { extractTextFromFile, ACCEPTED_FILE_TYPES } from "@/lib/fileTextExtractor";
 
 const STATUS_MAP = {
   rascunho: { label: "Rascunho", class: "bg-muted text-muted-foreground" },

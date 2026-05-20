@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp, ClipboardPaste, AlertTriangle, Pencil } from "lucide-react";

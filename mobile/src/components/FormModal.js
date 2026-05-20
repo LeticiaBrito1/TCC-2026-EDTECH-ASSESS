@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal, View, Text, ScrollView, KeyboardAvoidingView, Platform, Pressable } from "react-native";
-import { S, C } from "./AppStyles";
+import { S } from "./AppStyles";
 import Btn from "./Btn";
 
 export default function FormModal({ visible, title, onClose, onSave, saving, children }) {

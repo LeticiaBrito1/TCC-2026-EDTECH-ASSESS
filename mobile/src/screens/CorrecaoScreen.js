@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Image, Modal, Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { Alert, FlatList, Image, Modal, Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { S, C } from "../components/AppStyles";
