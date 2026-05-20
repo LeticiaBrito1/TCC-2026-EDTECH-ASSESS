@@ -88,28 +88,29 @@ const parseAnswersFromText = (rawText, totalQuestions) => {
 const buildVisionPrompt = (hintTotal) =>
   `Você está analisando uma FOLHA DE RESPOSTAS de prova escolar.
 
-ESTRUTURA DA FOLHA:
-- Cada questão tem 5 círculos na mesma linha, rotulados da ESQUERDA para DIREITA: A, B, C, D, E
-- A = 1º círculo (mais à esquerda)
-- B = 2º círculo
-- C = 3º círculo (centro)
-- D = 4º círculo
-- E = 5º círculo (mais à direita)
-- O aluno preencheu/escureceu apenas UM círculo por questão
-- Círculos não marcados estão vazios ou apenas com a borda
+LAYOUT DA FOLHA:
+- As questões estão dispostas em MÚLTIPLAS COLUNAS (geralmente 3 colunas por linha).
+- Leia da ESQUERDA para DIREITA, de cima para baixo: primeira todas as questões da linha 1 (col1, col2, col3), depois linha 2, etc.
+- Cada célula de questão mostra o número da questão seguido de 5 círculos: A B C D E (nessa ordem, da esquerda para direita).
 
-TAREFA 1 — Identificação:
-Localize o JSON impresso junto ao QR Code:
-{"avaliacao_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","aluno_id":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","versao":"A"}
-REGRAS: UUID = exatamente 36 chars (8-4-4-4-12, hex). Se não ler o UUID completo → null. Nunca invente.
+COMO IDENTIFICAR A RESPOSTA MARCADA:
+- O aluno marca apenas UM círculo por questão.
+- A marca pode ser: espiral, rabisco, X, risco, preenchimento — qualquer traço dentro do círculo conta.
+- Círculos SEM marca estão completamente vazios.
+- Identifique a POSIÇÃO do círculo marcado: 1º=A, 2º=B, 3º=C, 4º=D, 5º=E.
 
-TAREFA 2 — Respostas (questões 1 a ${hintTotal}):
-Para CADA questão, conte os círculos da esquerda e identifique qual está escurecido.
-Seja meticuloso: uma marcação leve já conta. Se dois estiverem marcados, escolha o mais escuro.
-Se nenhum estiver marcado, omita a questão do JSON.
+TAREFA 1 — Identificação (JSON impresso no canto da folha, próximo ao QR Code):
+Formato: {"avaliacao_id":"uuid","aluno_id":"uuid","versao":"A"}
+UUID = exatamente 36 caracteres (8-4-4-4-12, somente hex e hífens).
+Se não ler o UUID completo e correto → null. NUNCA invente ou complete.
 
-Responda SOMENTE com JSON válido (sem markdown, sem explicação):
-{"avaliacao_id":"uuid ou null","aluno_id":"uuid ou null","versao":"letra ou null","respostas":{"1":"B","2":"A","3":"C",...}}`;
+TAREFA 2 — Respostas:
+Examine CADA questão de 1 até ${hintTotal} individualmente.
+Para cada uma, localize o círculo que contém qualquer traço/marca e registre sua letra (A/B/C/D/E).
+Se nenhum círculo de uma questão tiver marca, omita essa questão do JSON.
+
+Responda SOMENTE com JSON válido (sem markdown, sem texto extra):
+{"avaliacao_id":"uuid ou null","aluno_id":"uuid ou null","versao":"letra ou null","respostas":{"1":"A","2":"C","3":"C","4":"B",...}}`;
 
 const runVisionFull = async (dataUrl, hintTotal, model = GROQ_VISION_MODEL) => {
   if (!groqVision) return null;
@@ -119,13 +120,13 @@ const runVisionFull = async (dataUrl, hintTotal, model = GROQ_VISION_MODEL) => {
   try {
     const response = await groqVision.chat.completions.create({
       model,
-      max_tokens: 1024,
+      max_tokens: 2048,
       temperature: 0,
       messages: [
         {
           role: "user",
           content: [
-            { type: "image_url", image_url: { url: dataUrl } },
+            { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
             { type: "text", text: prompt },
           ],
         },
