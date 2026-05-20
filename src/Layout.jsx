@@ -112,8 +112,8 @@ export default function Layout({ children, currentPageName }) {
       `} style={{ background: "hsl(218, 75%, 18%)" }}>
         <div className="shrink-0 border-b p-6" style={{ borderColor: "hsl(218, 75%, 26%)" }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "hsl(206, 72%, 55%)" }}>
-              <ScanLine className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white">
+              <img src="/logoEDTECH.png" alt="EdTech Assess" className="w-8 h-8 object-contain" />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white">EdTech Assess</h1>
