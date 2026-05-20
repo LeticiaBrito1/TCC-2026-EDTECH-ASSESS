@@ -3,11 +3,12 @@ import { correctionService } from "../services/correctionService.js";
 import { HttpError } from "../utils/httpError.js";
 
 const ocrPayloadSchema = z.object({
-  // IDs são opcionais quando a imagem é enviada — o modelo de visão os extrai do cartão resposta.
   avaliacao_id: z.string().uuid().optional(),
   aluno_id: z.string().uuid().optional(),
   image_base64: z.string().optional(),
   recognized_text: z.string().optional(),
+  // Se true, apenas detecta as respostas sem salvar o resultado (para revisão pelo professor)
+  preview: z.boolean().optional().default(false),
 });
 
 export const correctionController = {
@@ -28,6 +29,7 @@ export const correctionController = {
         alunoId: parsed.data.aluno_id || null,
         imageBase64: parsed.data.image_base64,
         recognizedText: parsed.data.recognized_text,
+        preview: parsed.data.preview ?? false,
       },
       req.user
     );

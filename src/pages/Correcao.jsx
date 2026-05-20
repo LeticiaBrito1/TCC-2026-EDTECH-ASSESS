@@ -80,6 +80,7 @@ export default function Correcao() {
   const [correcting, setCorrecting] = useState(false);
   const [result, setResult] = useState(null);
   const [ocrDetected, setOcrDetected] = useState(null);
+  const [ocrPreview, setOcrPreview] = useState(false);
   const [qrFeedback, setQrFeedback] = useState(null);
   const [qrPasteValue, setQrPasteValue] = useState("");
   const [ocrFile, setOcrFile] = useState(null);
@@ -119,10 +120,29 @@ export default function Correcao() {
   const correctByOcr = useMutation({
     mutationFn: (payload) => appClient.corrections.scanOcr(payload),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["resultados"] });
-      setResult(data.resultado);
-      setOcrDetected(data.detected || null);
-      setOcrFile(null);
+      if (data.preview) {
+        // Modo revisão: pré-preenche o formulário com as respostas da IA para o professor conferir
+        const det = data.detected || {};
+        if (det.avaliacao_id) setSelectedAvaliacao(det.avaliacao_id);
+        if (det.aluno_id) setSelectedAluno(det.aluno_id);
+        // Filtra respostas vazias
+        const respostasDetectadas = Object.fromEntries(
+          Object.entries(data.respostas_por_questao || {}).filter(([, v]) => v)
+        );
+        setRespostas(respostasDetectadas);
+        setOcrDetected(det);
+        setOcrPreview(true);
+        setOcrFile(null);
+        toast({
+          title: "IA detectou as respostas",
+          description: "Revise as respostas abaixo antes de confirmar. Corrija qualquer erro e clique em Confirmar.",
+        });
+      } else {
+        qc.invalidateQueries({ queryKey: ["resultados"] });
+        setResult(data.resultado);
+        setOcrDetected(data.detected || null);
+        setOcrFile(null);
+      }
     },
     onError: (error) => {
       setOcrError(error?.message || "Não foi possível corrigir pela imagem.");
@@ -204,9 +224,7 @@ export default function Correcao() {
     }
 
     const base64 = await fileToBase64(ocrFile);
-    // Envia IDs apenas se o professor já tiver selecionado manualmente.
-    // Se não, o backend extrai avaliação e aluno da imagem automaticamente.
-    const payload = { image_base64: base64 };
+    const payload = { image_base64: base64, preview: true };
     if (selectedAvaliacao) payload.avaliacao_id = selectedAvaliacao;
     if (selectedAluno) payload.aluno_id = selectedAluno;
 
@@ -217,6 +235,7 @@ export default function Correcao() {
     setResult(null);
     setOcrDetected(null);
     setOcrError(null);
+    setOcrPreview(false);
     setRespostas({});
     setSelectedAluno("");
     setOcrFile(null);
@@ -450,6 +469,25 @@ export default function Correcao() {
             </CardContent>
           </Card>
 
+          {/* Banner de revisão da IA */}
+          {ocrPreview && ocrDetected && (
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="p-4 flex items-start gap-3">
+                <ScanLine className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-primary">Respostas detectadas pela IA</p>
+                  <p className="text-sm text-muted-foreground">
+                    Aluno: <strong>{ocrDetected.aluno_nome}</strong> · Avaliação: <strong>{ocrDetected.avaliacao_titulo}</strong>
+                    {ocrDetected.versao ? ` · Versão ${ocrDetected.versao}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Confira cada resposta abaixo e corrija o que estiver errado antes de confirmar.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Marcação de respostas */}
           {questoesAvaliacao.length > 0 && selectedAluno && (
             <>
@@ -492,13 +530,13 @@ export default function Correcao() {
                 </CardContent>
               </Card>
 
-              <Button 
-                onClick={handleCorrigir} 
+              <Button
+                onClick={handleCorrigir}
                 disabled={correcting || Object.keys(respostas).length === 0}
                 className="w-full bg-primary hover:bg-primary/90 h-12 text-base"
               >
                 {correcting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
-                {correcting ? "Corrigindo..." : "Corrigir Avaliação"}
+                {correcting ? "Salvando..." : ocrPreview ? "Confirmar e Salvar Correção" : "Corrigir Avaliação"}
               </Button>
             </>
           )}

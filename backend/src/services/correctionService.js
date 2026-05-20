@@ -225,7 +225,7 @@ const buildCorrection = ({ avaliacao, aluno, questions, answerMap }) => {
 // ---------------------------------------------------------------------------
 
 export const correctionService = {
-  async correctByOcr({ avaliacaoId, alunoId, imageBase64, recognizedText }, actor) {
+  async correctByOcr({ avaliacaoId, alunoId, imageBase64, recognizedText, preview = false }, actor) {
     let detectedAvaliacaoId = avaliacaoId || null;
     let detectedAlunoId = alunoId || null;
     let detectedVersao = null;
@@ -323,8 +323,29 @@ export const correctionService = {
       );
     }
 
-    // --- Passo 6: Montar e salvar correção ---
+    // --- Passo 6: Montar correção (e salvar apenas se não for preview) ---
     const correctionPayload = buildCorrection({ avaliacao, aluno, questions, answerMap });
+
+    // Modo preview: retorna as respostas detectadas sem salvar para revisão do professor
+    if (preview) {
+      return {
+        preview: true,
+        source: ocrSource,
+        detected: {
+          avaliacao_id: avaliacao.id,
+          avaliacao_titulo: avaliacao.titulo,
+          aluno_id: aluno.id,
+          aluno_nome: aluno.nome,
+          versao: detectedVersao,
+        },
+        respostas_map: answerMap,
+        // Respostas no formato {questao_id: letra} para preencher o formulário
+        respostas_por_questao: Object.fromEntries(
+          questions.map((q, idx) => [q.id, answerMap[idx + 1] || ""])
+        ),
+      };
+    }
+
     const createdResult = await entityService.create("resultados", correctionPayload, actor);
 
     await auditService.log({
