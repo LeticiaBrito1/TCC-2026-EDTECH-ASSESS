@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/AlertDialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +35,8 @@ const emptyAiForm = {
 export default function Questoes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState("all");
@@ -105,8 +108,20 @@ export default function Questoes() {
   };
 
   const handleSubmit = () => {
-    if (!form.enunciado || !form.gabarito) return;
-    const data = { ...form, alternativas: form.alternativas.filter(a => a.texto) };
+    if (!form.enunciado.trim()) {
+      toast({ title: "Campo obrigatório", description: "Informe o enunciado da questão.", variant: "destructive" });
+      return;
+    }
+    const altsPreenchidas = form.alternativas.filter(a => a.texto.trim());
+    if (altsPreenchidas.length < 2) {
+      toast({ title: "Alternativas insuficientes", description: "Preencha pelo menos 2 alternativas.", variant: "destructive" });
+      return;
+    }
+    if (!altsPreenchidas.find(a => a.letra === form.gabarito)) {
+      toast({ title: "Gabarito inválido", description: "O gabarito deve corresponder a uma alternativa preenchida.", variant: "destructive" });
+      return;
+    }
+    const data = { ...form, alternativas: altsPreenchidas };
     editing ? update.mutate({ id: editing.id, d: data }) : create.mutate(data);
   };
 
@@ -224,7 +239,7 @@ export default function Questoes() {
                   </div>
                   <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}><Pencil className="w-3.5 h-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove.mutate(q.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setDeleteTarget(q); setDeleteDialogOpen(true); }}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 </div>
               </CardContent>
@@ -385,6 +400,23 @@ export default function Questoes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir questão?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. A questão será removida permanentemente do banco.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDeleteDialogOpen(false); setDeleteTarget(null); }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { remove.mutate(deleteTarget.id); setDeleteDialogOpen(false); setDeleteTarget(null); }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

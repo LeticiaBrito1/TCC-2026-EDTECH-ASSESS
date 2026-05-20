@@ -624,7 +624,7 @@ export default function Avaliacoes() {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Data de Aplicação</Label><Input type="date" lang="pt-BR" value={form.data_aplicacao} onChange={e => setForm({ ...form, data_aplicacao: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Data de Aplicação</Label><Input type="date" lang="pt-BR" min={new Date().toISOString().split("T")[0]} value={form.data_aplicacao} onChange={e => setForm({ ...form, data_aplicacao: e.target.value })} /></div>
               <div className="space-y-2"><Label>Total de Pontos (máx. 100)</Label><Input type="number" step="0.01" min={0} max={100} value={form.total_pontos} onChange={e => setForm({ ...form, total_pontos: e.target.value })} /></div>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
@@ -941,6 +941,7 @@ export default function Avaliacoes() {
                 <Input
                   type="date"
                   lang="pt-BR"
+                  min={new Date().toISOString().split("T")[0]}
                   value={aiForm.data_aplicacao}
                   onChange={e => setAiForm({ ...aiForm, data_aplicacao: e.target.value })}
                 />

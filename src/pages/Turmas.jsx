@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, Plus, Pencil, Trash2, Search, GraduationCap, BookOpen, ClipboardCheck } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/AlertDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,8 @@ const STATUS_LABEL = { rascunho: "Rascunho", publicada: "Publicada", aplicada: "
 export default function Turmas() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedTurma, setSelectedTurma] = useState(null);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
@@ -48,7 +51,7 @@ export default function Turmas() {
 
   const openDetail = (t) => { setSelectedTurma(t); setDetailOpen(true); };
 
-  const handleDelete = (id, e) => { e?.stopPropagation(); remove.mutate(id); };
+  const handleDelete = (turma, e) => { e?.stopPropagation(); setDeleteTarget(turma); setDeleteDialogOpen(true); };
 
   const handleSubmit = () => {
     if (!form.nome || !form.ano_letivo) return;
@@ -108,7 +111,7 @@ export default function Turmas() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => openEdit(t, e)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => handleDelete(t.id, e)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => handleDelete(t, e)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -131,7 +134,7 @@ export default function Turmas() {
                 <Select value={form.ano_letivo} onValueChange={v => setForm({ ...form, ano_letivo: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["2020","2021","2022","2023","2024","2025","2026","2027","2028","2029","2030"].map(y => (
+                    {Array.from({ length: 12 }, (_, i) => String(new Date().getFullYear() - 2 + i)).map(y => (
                       <SelectItem key={y} value={y}>{y}</SelectItem>
                     ))}
                   </SelectContent>
@@ -160,6 +163,23 @@ export default function Turmas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir turma?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A turma <strong>{deleteTarget?.nome}</strong> será excluída permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDeleteDialogOpen(false); setDeleteTarget(null); }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { remove.mutate(deleteTarget.id); setDeleteDialogOpen(false); setDeleteTarget(null); }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Dialog: Detalhe da turma */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
