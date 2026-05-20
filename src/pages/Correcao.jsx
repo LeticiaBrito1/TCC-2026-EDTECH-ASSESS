@@ -470,11 +470,11 @@ export default function Correcao() {
                         {q.alternativas?.map(a => (
                           <button
                             key={a.letra}
-                            onClick={() => setRespostas({ ...respostas, [q.id]: a.letra })}
+                            onClick={() => setRespostas(prev => ({ ...prev, [q.id]: a.letra }))}
                             className={`
                               w-10 h-10 rounded-full text-sm font-semibold transition-all duration-200
-                              ${respostas[q.id] === a.letra 
-                                ? 'bg-primary text-primary-foreground shadow-md scale-110' 
+                              ${respostas[q.id] === a.letra
+                                ? 'bg-primary text-primary-foreground shadow-md scale-110'
                                 : 'bg-muted text-muted-foreground hover:bg-accent'}
                             `}
                           >
@@ -482,7 +482,7 @@ export default function Correcao() {
                           </button>
                         ))}
                         {respostas[q.id] && (
-                          <button onClick={() => { const r = { ...respostas }; delete r[q.id]; setRespostas(r); }} className="text-xs text-muted-foreground hover:text-destructive ml-2">
+                          <button onClick={() => setRespostas(prev => { const r = { ...prev }; delete r[q.id]; return r; })} className="text-xs text-muted-foreground hover:text-destructive ml-2">
                             Limpar
                           </button>
                         )}
@@ -544,15 +544,28 @@ export default function Correcao() {
             <Progress value={result.percentual_acerto} className="max-w-md mx-auto" />
 
             <div className="text-left max-w-md mx-auto space-y-2">
-              {result.respostas?.map((r, idx) => (
-                <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${r.correta ? 'bg-success/5' : 'bg-destructive/5'}`}>
-                  <span className="text-sm font-medium">Questão {idx + 1}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Resp: {r.resposta || "—"}</span>
-                    {r.correta ? <CheckCircle2 className="w-4 h-4 text-success" /> : <XCircle className="w-4 h-4 text-destructive" />}
+              {result.respostas?.map((r, idx) => {
+                const questao = questoes.find(q => q.id === r.questao_id);
+                const gabarito = questao?.gabarito || "?";
+                return (
+                  <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${r.correta ? 'bg-success/5' : 'bg-destructive/5'}`}>
+                    <span className="text-sm font-medium">Questão {idx + 1}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-muted-foreground">
+                        Marcou: <strong>{r.resposta || "—"}</strong>
+                      </span>
+                      {!r.correta && (
+                        <span className="text-sm text-success">
+                          Correto: <strong>{gabarito}</strong>
+                        </span>
+                      )}
+                      {r.correta
+                        ? <CheckCircle2 className="w-4 h-4 text-success" />
+                        : <XCircle className="w-4 h-4 text-destructive" />}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <Button onClick={resetCorrecao} className="mt-4">Corrigir Outra Prova</Button>
