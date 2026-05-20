@@ -16,7 +16,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
-import { extractTextFromFile } from "@/lib/fileTextExtractor";
 
 const normalizeKey = (key) => String(key || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
@@ -97,31 +96,6 @@ export default function Alunos() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-
-    const isPdf = /\.pdf$/i.test(file.name);
-
-    if (isPdf) {
-      try {
-        const text = await extractTextFromFile(file);
-        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        const parsed = lines.map(line => {
-          const parts = line.split(/[,;\t]+/).map(p => p.trim());
-          const nome = parts[0] || "";
-          const matricula = parts[1] || "";
-          const email = parts.find(p => p.includes("@")) || "";
-          return { nome, matricula, email };
-        }).filter(r => r.nome && r.nome.toLowerCase() !== "nome");
-        if (parsed.length === 0) {
-          toast({ title: "Nenhum dado encontrado", description: "O PDF não contém linhas legíveis no formato Nome, Matrícula, Email.", variant: "destructive" });
-          return;
-        }
-        setImportRows(parsed);
-        setImportResults(null);
-      } catch {
-        toast({ title: "Erro ao ler PDF", description: "Não foi possível extrair dados do arquivo PDF.", variant: "destructive" });
-      }
-      return;
-    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -482,10 +456,10 @@ export default function Alunos() {
             </p>
 
             <div className="space-y-2">
-              <Label>Arquivo (CSV, XLSX ou PDF)</Label>
+              <Label>Arquivo (CSV ou XLSX)</Label>
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls,.pdf"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileChange}
                 className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-foreground"
               />
