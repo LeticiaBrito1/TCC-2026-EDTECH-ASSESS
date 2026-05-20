@@ -22,6 +22,9 @@ const DIST_PATH = path.join(__dirname, "../../dist");
 
 const app = express();
 
+// Health check — antes do CORS para que o Railway consiga verificar sem Origin header
+app.use("/api", healthRoutes);
+
 // Segurança: cabeçalhos HTTP (XSS, clickjacking, MIME sniffing, etc.)
 app.use(
   helmet({
@@ -92,9 +95,6 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Limite de geração de IA atingido. Aguarde 1 minuto." },
 });
-
-// Rotas públicas (sem autenticação)
-app.use("/api", healthRoutes);
 
 // Auth: aplica rate limit nos endpoints sensíveis antes de montar as rotas
 app.use("/api/auth/login", authLimiter);
