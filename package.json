@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "concurrently --names \"BACKEND,WEB,MOBILE\" --prefix-colors \"cyan,green,magenta\" \"npm run backend:dev\" \"vite --host localhost --port 5174 --strictPort\" \"npm --prefix mobile run start\"",
+    "ngrok": "concurrently --names \"BACKEND,NGROK\" --prefix-colors \"cyan,green\" \"npm run backend:start\" \"ngrok http --url=tonette-halituous-subimbricately.ngrok-free.dev 8787\"",
     "dev": "echo http://localhost:5174/ && vite --host localhost --port 5174 --strictPort",
     "dev:mobile": "vite --host 0.0.0.0 --port 5174 --strictPort",
     "backend:dev": "npm --prefix backend run dev",

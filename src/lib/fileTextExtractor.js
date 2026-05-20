@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 const readAsArrayBuffer = (file) =>
   new Promise((resolve, reject) => {
@@ -17,17 +18,29 @@ const readAsText = (file) =>
   });
 
 async function extractPdf(file) {
-  const { getDocument, GlobalWorkerOptions, version } = await import("pdfjs-dist");
-  GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`;
+  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
+  GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
   const buffer = await readAsArrayBuffer(file);
   const pdf = await getDocument({ data: buffer, useSystemFonts: true }).promise;
-  const pages = [];
+  const pageTexts = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    pages.push(content.items.map((item) => item.str).join(" "));
+    // Agrupa itens de texto pela posição Y (linha), preservando quebras de linha reais
+    const lineMap = {};
+    for (const item of content.items) {
+      if (!item.str?.trim()) continue;
+      const y = Math.round(item.transform[5]);
+      if (!lineMap[y]) lineMap[y] = [];
+      lineMap[y].push(item.str);
+    }
+    const sortedLines = Object.keys(lineMap)
+      .sort((a, b) => Number(b) - Number(a))
+      .map((y) => lineMap[y].join("").trim())
+      .filter(Boolean);
+    pageTexts.push(sortedLines.join("\n"));
   }
-  return pages.join("\n");
+  return pageTexts.join("\n");
 }
 
 async function extractDocx(file) {
@@ -47,7 +60,6 @@ async function extractPptx(file) {
   const texts = [];
   for (const name of slideFiles) {
     const xml = await zip.files[name].async("text");
-    // Extract all <a:t> text nodes from slide XML
     const matches = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || [];
     const slideText = matches.map((m) => m.replace(/<[^>]+>/g, "")).join(" ");
     if (slideText.trim()) texts.push(slideText.trim());
@@ -71,23 +83,10 @@ export const ACCEPTED_FILE_LABEL = "PDF, Word, PowerPoint, Excel, TXT, MD, CSV";
 
 export async function extractTextFromFile(file) {
   const name = file.name.toLowerCase();
-
-  if (/\.(txt|md|csv)$/i.test(name)) {
-    return readAsText(file);
-  }
-  if (/\.pdf$/i.test(name)) {
-    return extractPdf(file);
-  }
-  if (/\.docx?$/i.test(name)) {
-    return extractDocx(file);
-  }
-  if (/\.pptx?$/i.test(name)) {
-    return extractPptx(file);
-  }
-  if (/\.xlsx?$/i.test(name)) {
-    return extractXlsx(file);
-  }
-
-  // Fallback: attempt plain text read
+  if (/\.(txt|md|csv)$/i.test(name)) return readAsText(file);
+  if (/\.pdf$/i.test(name)) return extractPdf(file);
+  if (/\.docx?$/i.test(name)) return extractDocx(file);
+  if (/\.pptx?$/i.test(name)) return extractPptx(file);
+  if (/\.xlsx?$/i.test(name)) return extractXlsx(file);
   return readAsText(file);
 }
