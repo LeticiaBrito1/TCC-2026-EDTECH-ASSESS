@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp, ClipboardPaste, AlertTriangle } from "lucide-react";
+import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp, ClipboardPaste, AlertTriangle, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -81,6 +81,7 @@ export default function Correcao() {
   const [result, setResult] = useState(null);
   const [ocrDetected, setOcrDetected] = useState(null);
   const [ocrPreview, setOcrPreview] = useState(false);
+  const [editingResult, setEditingResult] = useState(null);
   const [qrFeedback, setQrFeedback] = useState(null);
   const [qrPasteValue, setQrPasteValue] = useState("");
   const [ocrFile, setOcrFile] = useState(null);
@@ -236,9 +237,24 @@ export default function Correcao() {
     setOcrDetected(null);
     setOcrError(null);
     setOcrPreview(false);
+    setEditingResult(null);
     setRespostas({});
     setSelectedAluno("");
     setOcrFile(null);
+  };
+
+  const handleEditResult = () => {
+    if (!result) return;
+    const respostasExistentes = {};
+    result.respostas?.forEach(r => {
+      if (r.resposta) respostasExistentes[r.questao_id] = r.resposta;
+    });
+    setRespostas(respostasExistentes);
+    setSelectedAvaliacao(result.avaliacao_id);
+    setSelectedAluno(result.aluno_id);
+    setEditingResult(result);
+    setResult(null);
+    setOcrPreview(false);
   };
 
   const handleQrDecoded = (decodedValue) => {
@@ -469,6 +485,21 @@ export default function Correcao() {
             </CardContent>
           </Card>
 
+          {/* Banner de edição de resultado existente */}
+          {editingResult && (
+            <Card className="border-warning/40 bg-warning/5">
+              <CardContent className="p-4 flex items-start gap-3">
+                <Pencil className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-warning">Editando correção existente</p>
+                  <p className="text-sm text-muted-foreground">
+                    Altere as respostas que estão erradas e clique em <strong>Confirmar e Salvar</strong>.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Banner de revisão da IA */}
           {ocrPreview && ocrDetected && (
             <Card className="border-primary/40 bg-primary/5">
@@ -536,7 +567,7 @@ export default function Correcao() {
                 className="w-full bg-primary hover:bg-primary/90 h-12 text-base"
               >
                 {correcting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
-                {correcting ? "Salvando..." : ocrPreview ? "Confirmar e Salvar Correção" : "Corrigir Avaliação"}
+                {correcting ? "Salvando..." : (ocrPreview || editingResult) ? "Confirmar e Salvar Correção" : "Corrigir Avaliação"}
               </Button>
             </>
           )}
@@ -606,7 +637,13 @@ export default function Correcao() {
               })}
             </div>
 
-            <Button onClick={resetCorrecao} className="mt-4">Corrigir Outra Prova</Button>
+            <div className="flex gap-3 justify-center mt-4 flex-wrap">
+              <Button variant="outline" onClick={handleEditResult}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Editar Respostas
+              </Button>
+              <Button onClick={resetCorrecao}>Corrigir Outra Prova</Button>
+            </div>
           </CardContent>
         </Card>
       )}
