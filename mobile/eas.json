@@ -5,7 +5,7 @@
   "build": {
     "preview": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://tcc-2026-edtech-assess-production.up.railway.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://tonette-halituous-subimbricately.ngrok-free.dev"
       },
       "android": {
         "buildType": "apk"
@@ -13,7 +13,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://tcc-2026-edtech-assess-production.up.railway.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://tonette-halituous-subimbricately.ngrok-free.dev"
       },
       "android": {
         "buildType": "app-bundle"
