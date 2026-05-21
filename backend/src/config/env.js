@@ -36,6 +36,10 @@ export const env = {
   smtpPass: String(process.env.SMTP_PASS || "").trim(),
   smtpFrom: String(process.env.SMTP_FROM || "noreply@edtech.local").trim(),
   appUrl: String(process.env.APP_URL || "http://localhost:5174").trim().replace(/\/+$/, ""),
+  // Twilio SMS
+  twilioAccountSid: String(process.env.TWILIO_ACCOUNT_SID || "").trim(),
+  twilioAuthToken: String(process.env.TWILIO_AUTH_TOKEN || "").trim(),
+  twilioPhoneNumber: String(process.env.TWILIO_PHONE_NUMBER || "").trim(),
 };
 
 const jwtSecret = env.jwtSecret;

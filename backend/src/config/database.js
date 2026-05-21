@@ -67,6 +67,9 @@ const runMigrations = async (query) => {
   await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS reset_token TEXT;`);
   await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;`);
 
+  // Migração incremental: telefone para verificação via SMS
+  await query(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone TEXT;`);
+
   await query(`
     CREATE TABLE IF NOT EXISTS app_audit_logs (
       id UUID PRIMARY KEY,

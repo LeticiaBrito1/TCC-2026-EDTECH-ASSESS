@@ -6,8 +6,7 @@ import { authenticate } from "../middlewares/authMiddleware.js";
 const router = Router();
 
 router.post("/auth/register", asyncHandler(authController.register));
-router.get("/auth/verify-email", asyncHandler(authController.verifyEmail));
-router.post("/auth/resend-verification", asyncHandler(authController.resendVerification));
+router.post("/auth/verify-phone", asyncHandler(authController.verifyPhone));
 router.post("/auth/login", asyncHandler(authController.login));
 router.post("/auth/verify-login-code", asyncHandler(authController.verifyLoginCode));
 router.post("/auth/forgot-password", asyncHandler(authController.forgotPassword));

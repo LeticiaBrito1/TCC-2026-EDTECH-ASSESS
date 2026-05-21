@@ -29,11 +29,17 @@ const request = async (path, { method = "GET", body, token } = {}) => {
 export const apiLogin = ({ email, password }) =>
   request("/api/auth/login", { method: "POST", body: { email, password } });
 
-export const apiRegister = ({ full_name, email, password }) =>
-  request("/api/auth/register", { method: "POST", body: { full_name, email, password } });
+export const apiRegister = ({ full_name, email, password, phone }) =>
+  request("/api/auth/register", { method: "POST", body: { full_name, email, password, phone } });
 
-export const apiForgotPassword = (email) =>
-  request("/api/auth/forgot-password", { method: "POST", body: { email } });
+export const apiVerifyPhone = (phone, code) =>
+  request("/api/auth/verify-phone", { method: "POST", body: { phone, code } });
+
+export const apiForgotPassword = (phone) =>
+  request("/api/auth/forgot-password", { method: "POST", body: { phone } });
+
+export const apiResetPassword = (phone, code, nova_senha) =>
+  request("/api/auth/reset-password", { method: "POST", body: { phone, code, nova_senha } });
 
 export const apiVerifyLoginCode = ({ email, code }) =>
   request("/api/auth/verify-login-code", { method: "POST", body: { email, code } });

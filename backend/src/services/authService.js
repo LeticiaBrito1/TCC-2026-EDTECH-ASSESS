@@ -1,25 +1,23 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { randomUUID, randomBytes, randomInt } from "node:crypto";
+import { randomUUID, randomInt } from "node:crypto";
 import { env } from "../config/env.js";
 import {
   createUser,
   findUserByEmail,
+  findUserByPhone,
   findUserById,
   findUserByIdWithHash,
-  findUserByVerificationToken,
   markEmailVerified,
-  setVerificationToken,
   setLoginCode,
   clearLoginCode,
   setResetToken,
-  findUserByResetToken,
   clearResetToken,
   updateUser,
   updateUserPassword,
   incrementTokenVersion,
 } from "../models/authModel.js";
-import { sendVerificationEmail, sendLoginCodeEmail, sendPasswordResetEmail } from "./emailService.js";
+import { sendVerificationSms, sendLoginCodeSms, sendPasswordResetSms } from "./smsService.js";
 import { HttpError } from "../utils/httpError.js";
 
 const sanitizeUser = (user) => ({
@@ -28,33 +26,32 @@ const sanitizeUser = (user) => ({
   email: user.email,
   role: user.role,
   active: user.active,
+  phone: user.phone ?? null,
   email_verified: user.email_verified ?? false,
 });
 
 const signToken = (user) =>
   jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      tv: user.token_version ?? 0,
-    },
+    { sub: user.id, email: user.email, role: user.role, tv: user.token_version ?? 0 },
     env.jwtSecret,
     { expiresIn: env.jwtExpiresIn }
   );
 
-const generateVerificationToken = () => randomBytes(32).toString("hex");
+const generateCode = () => String(randomInt(100000, 1000000));
 
 export const authService = {
-  async register({ full_name, email, password }) {
+  async register({ full_name, email, password, phone }) {
     const existing = await findUserByEmail(email);
-    if (existing) {
-      throw new HttpError(409, "Este e-mail já está cadastrado.");
+    if (existing) throw new HttpError(409, "Este e-mail já está cadastrado.");
+
+    if (phone) {
+      const existingPhone = await findUserByPhone(phone);
+      if (existingPhone) throw new HttpError(409, "Este telefone já está cadastrado.");
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const verificationToken = generateVerificationToken();
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    const code = generateCode();
+    const codeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
     const user = await createUser({
       id: randomUUID(),
@@ -62,60 +59,36 @@ export const authService = {
       email: email.trim().toLowerCase(),
       password_hash: passwordHash,
       role: "professor",
-      verification_token: verificationToken,
-      verification_expires: verificationExpires,
+      phone: phone?.trim() || null,
+      verification_token: null,
+      verification_expires: null,
     });
 
-    await sendVerificationEmail({
-      toEmail: user.email,
-      toName: user.full_name,
-      token: verificationToken,
-    });
+    // Guarda código de verificação no campo login_code
+    await setLoginCode(user.id, code, codeExpires);
 
-    return {
-      message: "Cadastro realizado. Verifique seu e-mail para ativar a conta.",
-      email: user.email,
-    };
+    await sendVerificationSms({ toPhone: phone, toName: user.full_name, code });
+
+    return { step: "verify_phone", phone, message: "Código enviado por SMS. Verifique seu celular." };
   },
 
-  async verifyEmail(token) {
-    if (!token) throw new HttpError(400, "Token de verificação ausente.");
+  async verifyPhone({ phone, code }) {
+    const user = await findUserByPhone(phone);
+    if (!user) throw new HttpError(400, "Telefone não encontrado.");
 
-    const user = await findUserByVerificationToken(token);
-    if (!user) throw new HttpError(400, "Link de verificação inválido ou já utilizado.");
+    if (user.email_verified) return { message: "Conta já verificada. Faça login." };
 
-    if (user.email_verified) {
-      return { message: "E-mail já verificado. Faça login para continuar." };
+    if (!user.login_code || user.login_code !== String(code).trim()) {
+      throw new HttpError(401, "Código incorreto. Verifique o SMS e tente novamente.");
+    }
+    if (new Date() > new Date(user.login_code_expires)) {
+      await clearLoginCode(user.id);
+      throw new HttpError(410, "Código expirado. Faça o cadastro novamente para receber um novo.");
     }
 
-    if (new Date() > new Date(user.verification_expires)) {
-      throw new HttpError(410, "Link de verificação expirado. Solicite um novo.");
-    }
-
+    await clearLoginCode(user.id);
     await markEmailVerified(user.id);
-    return { message: "E-mail confirmado com sucesso! Agora você pode fazer login." };
-  },
-
-  async resendVerification(email) {
-    if (!email) throw new HttpError(400, "E-mail obrigatório.");
-
-    const user = await findUserByEmail(email);
-    // Resposta genérica para não confirmar se o e-mail existe
-    if (!user || user.email_verified) {
-      return { message: "Se o e-mail estiver cadastrado e não verificado, você receberá um novo link em breve." };
-    }
-
-    const verificationToken = generateVerificationToken();
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await setVerificationToken(user.id, verificationToken, verificationExpires);
-    await sendVerificationEmail({
-      toEmail: user.email,
-      toName: user.full_name,
-      token: verificationToken,
-    });
-
-    return { message: "Novo link de verificação enviado. Verifique sua caixa de entrada." };
+    return { message: "Conta verificada com sucesso! Agora você pode fazer login." };
   },
 
   async login({ email, password }) {
@@ -127,20 +100,19 @@ export const authService = {
     if (!matches) throw new HttpError(401, "Credenciais inválidas.");
 
     if (!user.email_verified) {
-      throw new HttpError(403, "E-mail não verificado. Confirme seu e-mail antes de fazer login.", {
-        code: "email_not_verified",
-        email: user.email,
+      throw new HttpError(403, "Conta não verificada. Verifique seu celular antes de fazer login.", {
+        code: "phone_not_verified",
+        phone: user.phone,
       });
     }
 
-    // Gera código de 6 dígitos e envia por e-mail
-    const code = String(randomInt(100000, 1000000));
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const code = generateCode();
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
     await setLoginCode(user.id, code, expires);
-    await sendLoginCodeEmail({ toEmail: user.email, toName: user.full_name, code });
+    await sendLoginCodeSms({ toPhone: user.phone, toName: user.full_name, code });
 
-    return { step: "code_required", email: user.email };
+    return { step: "code_required", phone: user.phone, email: user.email };
   },
 
   async verifyLoginCode({ email, code }) {
@@ -148,9 +120,8 @@ export const authService = {
     if (!user || !user.active) throw new HttpError(401, "Código inválido ou expirado.");
 
     if (!user.login_code || user.login_code !== String(code).trim()) {
-      throw new HttpError(401, "Código incorreto. Verifique seu e-mail e tente novamente.");
+      throw new HttpError(401, "Código incorreto. Verifique o SMS e tente novamente.");
     }
-
     if (new Date() > new Date(user.login_code_expires)) {
       await clearLoginCode(user.id);
       throw new HttpError(410, "Código expirado. Faça login novamente para receber um novo código.");
@@ -169,39 +140,37 @@ export const authService = {
 
   async updateProfile(userId, { full_name, email }) {
     const existing = await findUserByEmail(email);
-    if (existing && existing.id !== userId) {
-      throw new HttpError(409, "Este e-mail já está em uso por outro usuário.");
-    }
+    if (existing && existing.id !== userId) throw new HttpError(409, "Este e-mail já está em uso.");
     const updated = await updateUser(userId, { full_name, email });
     if (!updated) throw new HttpError(404, "Usuário não encontrado.");
     return sanitizeUser(updated);
   },
 
-  async forgotPassword(email) {
-    const user = await findUserByEmail(email);
-    // Resposta genérica: não revela se o e-mail existe
+  async forgotPassword(phone) {
+    const user = await findUserByPhone(phone);
     if (!user || !user.active || !user.email_verified) {
-      return { message: "Se o e-mail estiver cadastrado e verificado, você receberá um link em breve." };
+      return { message: "Se o telefone estiver cadastrado e verificado, você receberá um código em breve." };
     }
 
-    const token = randomBytes(32).toString("hex");
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    const code = generateCode();
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
-    await setResetToken(user.id, token, expires);
-    await sendPasswordResetEmail({ toEmail: user.email, toName: user.full_name, token });
+    await setResetToken(user.id, code, expires);
+    await sendPasswordResetSms({ toPhone: user.phone, toName: user.full_name, code });
 
-    return { message: "Se o e-mail estiver cadastrado e verificado, você receberá um link em breve." };
+    return { step: "code_required", message: "Código enviado por SMS." };
   },
 
-  async resetPassword(token, novaSenha) {
-    if (!token) throw new HttpError(400, "Token ausente.");
+  async resetPassword(phone, code, novaSenha) {
+    const user = await findUserByPhone(phone);
+    if (!user || !user.active) throw new HttpError(400, "Telefone inválido.");
 
-    const user = await findUserByResetToken(token);
-    if (!user || !user.active) throw new HttpError(400, "Link de redefinição inválido ou já utilizado.");
-
+    if (!user.reset_token || user.reset_token !== String(code).trim()) {
+      throw new HttpError(401, "Código incorreto.");
+    }
     if (new Date() > new Date(user.reset_token_expires)) {
       await clearResetToken(user.id);
-      throw new HttpError(410, "Link de redefinição expirado. Solicite um novo.");
+      throw new HttpError(410, "Código expirado. Solicite um novo.");
     }
 
     const newHash = await bcrypt.hash(novaSenha, 12);

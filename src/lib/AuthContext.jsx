@@ -13,10 +13,12 @@ export const AuthProvider = ({ children }) => {
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [isSubmittingRegister, setIsSubmittingRegister] = useState(false);
   const [isSubmittingLoginCode, setIsSubmittingLoginCode] = useState(false);
-  // Guarda o e-mail após cadastro para mostrar na tela de confirmação
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState(null);
-  // Guarda o e-mail durante o fluxo de código de login 2FA
+  const [isSubmittingVerifyPhone, setIsSubmittingVerifyPhone] = useState(false);
+  // Guarda o telefone após cadastro para mostrar na tela de verificação
+  const [pendingVerificationPhone, setPendingVerificationPhone] = useState(null);
+  // Guarda email e telefone durante o fluxo de código de login 2FA
   const [pendingLoginEmail, setPendingLoginEmail] = useState(null);
+  const [pendingLoginPhone, setPendingLoginPhone] = useState(null);
 
   useEffect(() => {
     checkAppState();
@@ -46,20 +48,20 @@ export const AuthProvider = ({ children }) => {
     appClient.auth.logout?.();
     setUser(null);
     setIsAuthenticated(false);
-    setPendingVerificationEmail(null);
+    setPendingVerificationPhone(null);
     setPendingLoginEmail(null);
+    setPendingLoginPhone(null);
     setAuthError({ type: "auth_required", message: "Autenticação obrigatória" });
   };
 
-  const register = async ({ full_name, email, password }) => {
+  const register = async ({ full_name, email, password, phone }) => {
     setIsSubmittingRegister(true);
     setAuthError(null);
 
     try {
-      // Registro não faz login automático — apenas envia o e-mail de verificação
-      await appClient.auth.register({ full_name, email, password });
-      setPendingVerificationEmail(email);
-      setAuthError({ type: "verify_email_pending", message: "Verifique seu e-mail." });
+      await appClient.auth.register({ full_name, email, password, phone });
+      setPendingVerificationPhone(phone);
+      setAuthError({ type: "verify_phone_pending", message: "Verifique seu celular." });
     } catch (error) {
       setAuthError({
         type: "register_failed",
@@ -71,6 +73,23 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const verifyPhone = async (code) => {
+    if (!pendingVerificationPhone) return;
+    setIsSubmittingVerifyPhone(true);
+    setAuthError(null);
+
+    try {
+      await appClient.auth.verifyPhone(pendingVerificationPhone, code);
+      setPendingVerificationPhone(null);
+      setAuthError({ type: "auth_required", message: "Conta verificada! Faça login." });
+    } catch (error) {
+      setAuthError({ type: "verify_phone_failed", message: error?.message || "Código inválido." });
+      throw error;
+    } finally {
+      setIsSubmittingVerifyPhone(false);
+    }
+  };
+
   const login = async (email, password) => {
     setIsSubmittingLogin(true);
     setAuthError(null);
@@ -78,31 +97,20 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await appClient.auth.login(email, password);
 
-      // Backend retorna { step: "code_required", email } — aguarda código 2FA
       if (result?.step === "code_required") {
         setPendingLoginEmail(result.email || email);
+        setPendingLoginPhone(result.phone || null);
         setAuthError({ type: "login_code_required", message: "Código enviado." });
         return null;
       }
 
-      // Fluxo legado (não deve ocorrer, mas previne regressão)
       setUser(result);
       setIsAuthenticated(Boolean(result));
       return result;
     } catch (error) {
       setUser(null);
       setIsAuthenticated(false);
-
-      const isUnverified =
-        error?.message?.toLowerCase().includes("não verificado") ||
-        error?.message?.toLowerCase().includes("e-mail");
-
-      if (isUnverified) {
-        setPendingVerificationEmail(email);
-        setAuthError({ type: "email_not_verified", message: error.message, email });
-      } else {
-        setAuthError({ type: "login_failed", message: error?.message || "Falha ao autenticar." });
-      }
+      setAuthError({ type: "login_failed", message: error?.message || "Falha ao autenticar." });
       throw error;
     } finally {
       setIsSubmittingLogin(false);
@@ -119,6 +127,7 @@ export const AuthProvider = ({ children }) => {
       setUser(currentUser);
       setIsAuthenticated(Boolean(currentUser));
       setPendingLoginEmail(null);
+      setPendingLoginPhone(null);
       return currentUser;
     } catch (error) {
       setAuthError({ type: "login_code_failed", message: error?.message || "Código inválido." });
@@ -130,18 +139,20 @@ export const AuthProvider = ({ children }) => {
 
   const cancelLoginCode = () => {
     setPendingLoginEmail(null);
+    setPendingLoginPhone(null);
     setAuthError({ type: "auth_required", message: "Autenticação obrigatória" });
   };
 
   const navigateToLogin = () => {
     appClient.auth.redirectToLogin?.(window.location.href);
-    setPendingVerificationEmail(null);
+    setPendingVerificationPhone(null);
     setPendingLoginEmail(null);
+    setPendingLoginPhone(null);
     setAuthError({ type: "auth_required", message: "Autenticação obrigatória" });
   };
 
   const clearPendingVerification = () => {
-    setPendingVerificationEmail(null);
+    setPendingVerificationPhone(null);
     setAuthError({ type: "auth_required", message: "Autenticação obrigatória" });
   };
 
@@ -157,11 +168,14 @@ export const AuthProvider = ({ children }) => {
         isSubmittingLogin,
         isSubmittingRegister,
         isSubmittingLoginCode,
-        pendingVerificationEmail,
+        isSubmittingVerifyPhone,
+        pendingVerificationPhone,
         pendingLoginEmail,
+        pendingLoginPhone,
         login,
         register,
         logout,
+        verifyPhone,
         verifyLoginCode,
         cancelLoginCode,
         navigateToLogin,

@@ -46,9 +46,11 @@ const clearAuthToken = () => {
 const parseErrorResponse = async (response) => {
   try {
     const body = await response.json();
-    return body?.error || body?.message || `Erro HTTP ${response.status}`;
+    const err = new Error(body?.error || body?.message || `Erro HTTP ${response.status}`);
+    err.details = body?.details || null;
+    return err;
   } catch {
-    return `Erro HTTP ${response.status}`;
+    return new Error(`Erro HTTP ${response.status}`);
   }
 };
 
@@ -77,7 +79,7 @@ const request = async (
   }
 
   if (!response.ok) {
-    throw new Error(await parseErrorResponse(response));
+    throw await parseErrorResponse(response);
   }
 
   if (response.status === 204) return null;
@@ -121,25 +123,21 @@ const createClient = () => {
       },
     },
     auth: {
-      register: async ({ full_name, email, password }) => {
+      register: async ({ full_name, email, password, phone }) => {
         return request("/api/auth/register", {
           method: "POST",
           skipAuth: true,
-          body: { full_name, email, password },
+          body: { full_name, email, password, phone },
         });
       },
-      verifyEmail: async (token) =>
-        request(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, { skipAuth: true }),
-      resendVerification: async (email) =>
-        request("/api/auth/resend-verification", { method: "POST", skipAuth: true, body: { email } }),
+      verifyPhone: async (phone, code) =>
+        request("/api/auth/verify-phone", { method: "POST", skipAuth: true, body: { phone, code } }),
       login: async (email, password) => {
-        const result = await request("/api/auth/login", {
+        return request("/api/auth/login", {
           method: "POST",
           skipAuth: true,
           body: { email, password },
         });
-        // Retorna { step: "code_required", email } — token ainda não emitido
-        return result;
       },
       verifyLoginCode: async (email, code) => {
         const result = await request("/api/auth/verify-login-code", {
@@ -155,10 +153,10 @@ const createClient = () => {
       me: async () => request("/api/auth/me"),
       updateProfile: async (data) => request("/api/auth/profile", { method: "PATCH", body: data }),
       changePassword: async (data) => request("/api/auth/change-password", { method: "POST", body: data }),
-      forgotPassword: async (email) =>
-        request("/api/auth/forgot-password", { method: "POST", skipAuth: true, body: { email } }),
-      resetPassword: async (token, nova_senha) =>
-        request("/api/auth/reset-password", { method: "POST", skipAuth: true, body: { token, nova_senha } }),
+      forgotPassword: async (phone) =>
+        request("/api/auth/forgot-password", { method: "POST", skipAuth: true, body: { phone } }),
+      resetPassword: async (phone, code, nova_senha) =>
+        request("/api/auth/reset-password", { method: "POST", skipAuth: true, body: { phone, code, nova_senha } }),
       logout: () => {
         clearAuthToken();
       },
