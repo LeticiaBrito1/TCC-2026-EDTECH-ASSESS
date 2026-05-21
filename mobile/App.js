@@ -9,7 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 import { Ionicons } from "@expo/vector-icons";
 
-import { API_BASE_URL, apiLogin, apiVerifyLoginCode, apiMe, apiRegister, apiVerifyPhone, apiForgotPassword, apiResetPassword } from "./src/api/client";
+import { API_BASE_URL, apiLogin, apiVerifyLoginCode, apiMe, apiRegister, apiForgotPassword } from "./src/api/client";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import AlunosScreen from "./src/screens/AlunosScreen";
 import AvaliacoesScreen from "./src/screens/AvaliacoesScreen";
@@ -212,36 +212,55 @@ function LoginScreen({ onLogin, loading, error, onGoRegister, onGoForgot }) {
 }
 
 // ─── Tela de Cadastro ─────────────────────────────────────────────────────────
-function RegisterScreen({ onBack, onPendingVerification }) {
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", password: "", confirm: "" });
+function RegisterScreen({ onBack, onRegistered }) {
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" });
   const [terms, setTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   const submit = async () => {
     setError("");
-    if (!form.full_name.trim() || !form.email.trim() || !form.phone.trim() || !form.password) {
+    if (!form.full_name.trim() || !form.email.trim() || !form.password) {
       setError("Preencha todos os campos obrigatórios."); return;
     }
     if (form.password !== form.confirm) {
       setError("As senhas não coincidem."); return;
     }
-    if (form.password.length < 8) {
-      setError("A senha deve ter ao menos 8 caracteres."); return;
-    }
-    if (!/[A-Za-z]/.test(form.password) || !/[0-9]/.test(form.password)) {
-      setError("A senha deve conter letras e números."); return;
+    if (form.password.length < 6) {
+      setError("A senha deve ter ao menos 6 caracteres."); return;
     }
     if (!terms) {
       setError("Você deve aceitar os termos de privacidade."); return;
     }
     setLoading(true);
     try {
-      await apiRegister({ full_name: form.full_name.trim(), email: form.email.trim(), phone: form.phone.trim(), password: form.password });
-      onPendingVerification(form.phone.trim());
+      await apiRegister({ full_name: form.full_name.trim(), email: form.email.trim(), password: form.password });
+      setSuccess(true);
     } catch (e) { setError(e?.message || "Falha ao criar conta."); }
     finally { setLoading(false); }
   };
+
+  if (success) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: "center", gap: 20 }}>
+          <View style={{ alignItems: "center", gap: 16 }}>
+            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 40 }}>✅</Text>
+            </View>
+            <Text style={{ fontSize: 22, fontWeight: "900", color: C.dark, textAlign: "center" }}>Conta criada!</Text>
+            <Text style={{ fontSize: 14, color: C.muted, textAlign: "center", lineHeight: 22 }}>
+              Verifique seu email para ativar a conta e depois faça o login.
+            </Text>
+            <Pressable onPress={onBack} style={[authStyles.btn, { width: "100%" }]}>
+              <Text style={authStyles.btnText}>Ir para o Login</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
@@ -254,7 +273,6 @@ function RegisterScreen({ onBack, onPendingVerification }) {
         </View>
 
         <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 20, gap: 14 }}>
-          <Text style={{ fontSize: 13, color: C.muted }}>Você receberá um código de verificação por SMS.</Text>
           <View style={{ gap: 4 }}>
             <Text style={authStyles.label}>Nome completo *</Text>
             <TextInput style={authStyles.input} placeholder="Seu nome" value={form.full_name}
@@ -267,12 +285,7 @@ function RegisterScreen({ onBack, onPendingVerification }) {
               onChangeText={v => setForm({ ...form, email: v })} placeholderTextColor={C.muted} />
           </View>
           <View style={{ gap: 4 }}>
-            <Text style={authStyles.label}>Celular (com DDD) *</Text>
-            <TextInput style={authStyles.input} placeholder="+55 11 99999-9999" keyboardType="phone-pad"
-              value={form.phone} onChangeText={v => setForm({ ...form, phone: v })} placeholderTextColor={C.muted} />
-          </View>
-          <View style={{ gap: 4 }}>
-            <Text style={authStyles.label}>Senha * (mín. 8 caracteres, letras e números)</Text>
+            <Text style={authStyles.label}>Senha * (mín. 6 caracteres)</Text>
             <TextInput style={authStyles.input} placeholder="••••••••" secureTextEntry
               autoCapitalize="none" value={form.password}
               onChangeText={v => setForm({ ...form, password: v })} placeholderTextColor={C.muted} />
@@ -311,79 +324,20 @@ function RegisterScreen({ onBack, onPendingVerification }) {
   );
 }
 
-// ─── Tela de Verificação de Celular (após cadastro) ──────────────────────────
-function VerifyPhoneScreen({ phone, onVerified, onBack }) {
-  const [code, setCode] = useState("");
+// ─── Tela Esqueci a Senha ─────────────────────────────────────────────────────
+function ForgotPasswordScreen({ onBack }) {
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
 
   const submit = async () => {
-    if (code.length !== 6) return;
+    if (!email.trim()) { setError("Digite seu email."); return; }
     setError(""); setLoading(true);
     try {
-      await apiVerifyPhone(phone, code);
-      onVerified();
-    } catch (e) { setError(e?.message || "Código inválido."); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: "center", gap: 20 }}>
-        <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 12, fontWeight: "700", color: C.primary, textTransform: "uppercase" }}>Verificação</Text>
-          <Text style={{ fontSize: 24, fontWeight: "900", color: C.dark }}>Confirme seu celular</Text>
-          <Text style={{ color: C.muted }}>Enviamos um código por SMS para {phone}</Text>
-        </View>
-        <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 20, gap: 14 }}>
-          <TextInput style={[authStyles.input, { textAlign: "center", fontSize: 28, fontWeight: "900", letterSpacing: 8 }]}
-            placeholder="000000" keyboardType="number-pad" maxLength={6} value={code}
-            onChangeText={v => setCode(v.replace(/\D/g, "").slice(0, 6))} placeholderTextColor={C.muted} />
-          {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
-          <Pressable onPress={submit} disabled={loading || code.length !== 6}
-            style={({ pressed }) => [authStyles.btn, (pressed || loading || code.length !== 6) && { opacity: 0.6 }]}>
-            {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Verificar</Text>}
-          </Pressable>
-          <Pressable onPress={onBack}>
-            <Text style={{ textAlign: "center", color: C.muted, fontWeight: "600" }}>Voltar</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-// ─── Tela Esqueci a Senha (multi-step via SMS) ───────────────────────────────
-function ForgotPasswordScreen({ onBack }) {
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [novaSenha, setNovaSenha] = useState("");
-  const [confirmar, setConfirmar] = useState("");
-  const [step, setStep] = useState("phone"); // phone | reset | success
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const sendCode = async () => {
-    if (!phone.trim()) { setError("Digite o celular."); return; }
-    setError(""); setLoading(true);
-    try {
-      await apiForgotPassword(phone.trim());
-      setStep("reset");
-    } catch (e) { setError(e?.message || "Falha ao enviar código."); }
-    finally { setLoading(false); }
-  };
-
-  const resetPassword = async () => {
-    if (code.length !== 6) { setError("Código inválido."); return; }
-    if (novaSenha.length < 8 || !/[A-Za-z]/.test(novaSenha) || !/[0-9]/.test(novaSenha)) {
-      setError("Senha deve ter 8+ caracteres, letras e números."); return;
-    }
-    if (novaSenha !== confirmar) { setError("Senhas não coincidem."); return; }
-    setError(""); setLoading(true);
-    try {
-      await apiResetPassword(phone.trim(), code, novaSenha);
-      setStep("success");
-    } catch (e) { setError(e?.message || "Não foi possível redefinir a senha."); }
+      await apiForgotPassword(email.trim());
+      setSent(true);
+    } catch (e) { setError(e?.message || "Falha ao enviar email."); }
     finally { setLoading(false); }
   };
 
@@ -391,66 +345,37 @@ function ForgotPasswordScreen({ onBack }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: "center", gap: 20 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Pressable onPress={step === "reset" ? () => setStep("phone") : onBack} style={{ padding: 4 }}>
+          <Pressable onPress={onBack} style={{ padding: 4 }}>
             <Text style={{ fontSize: 24, color: C.primary }}>‹</Text>
           </Pressable>
           <Text style={{ fontSize: 20, fontWeight: "900", color: C.dark }}>Esqueci a senha</Text>
         </View>
 
-        {step === "phone" && (
-          <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 20, gap: 14 }}>
-            <Text style={{ fontSize: 14, color: C.muted, lineHeight: 20 }}>
-              Digite seu celular cadastrado. Enviaremos um código por SMS.
-            </Text>
-            <View style={{ gap: 4 }}>
-              <Text style={authStyles.label}>Celular (com DDD)</Text>
-              <TextInput style={authStyles.input} placeholder="+55 11 99999-9999" keyboardType="phone-pad"
-                value={phone} onChangeText={setPhone} placeholderTextColor={C.muted} />
-            </View>
-            {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
-            <Pressable onPress={sendCode} disabled={loading}
-              style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}>
-              {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Enviar código SMS</Text>}
-            </Pressable>
-          </View>
-        )}
-
-        {step === "reset" && (
-          <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 20, gap: 14 }}>
-            <Text style={{ fontSize: 14, color: C.muted }}>Código enviado para {phone}</Text>
-            <View style={{ gap: 4 }}>
-              <Text style={authStyles.label}>Código SMS</Text>
-              <TextInput style={[authStyles.input, { textAlign: "center", fontSize: 24, fontWeight: "900", letterSpacing: 6 }]}
-                placeholder="000000" keyboardType="number-pad" maxLength={6} value={code}
-                onChangeText={v => setCode(v.replace(/\D/g, "").slice(0, 6))} placeholderTextColor={C.muted} />
-            </View>
-            <View style={{ gap: 4 }}>
-              <Text style={authStyles.label}>Nova senha</Text>
-              <TextInput style={authStyles.input} placeholder="Mín. 8 caracteres, letras e números" secureTextEntry
-                autoCapitalize="none" value={novaSenha} onChangeText={setNovaSenha} placeholderTextColor={C.muted} />
-            </View>
-            <View style={{ gap: 4 }}>
-              <Text style={authStyles.label}>Confirmar senha</Text>
-              <TextInput style={authStyles.input} placeholder="Repita a nova senha" secureTextEntry
-                autoCapitalize="none" value={confirmar} onChangeText={setConfirmar} placeholderTextColor={C.muted} />
-            </View>
-            {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
-            <Pressable onPress={resetPassword} disabled={loading}
-              style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}>
-              {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Redefinir senha</Text>}
-            </Pressable>
-          </View>
-        )}
-
-        {step === "success" && (
+        {sent ? (
           <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 24, gap: 16, alignItems: "center" }}>
-            <Text style={{ fontSize: 40 }}>✅</Text>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: C.dark, textAlign: "center" }}>Senha redefinida!</Text>
+            <Text style={{ fontSize: 40 }}>📧</Text>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: C.dark, textAlign: "center" }}>Email enviado!</Text>
             <Text style={{ fontSize: 14, color: C.muted, textAlign: "center", lineHeight: 22 }}>
-              Faça login com a nova senha.
+              Verifique sua caixa de entrada e siga as instruções para redefinir a senha.
             </Text>
             <Pressable onPress={onBack} style={[authStyles.btn, { width: "100%" }]}>
               <Text style={authStyles.btnText}>Voltar ao Login</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 20, gap: 14 }}>
+            <Text style={{ fontSize: 14, color: C.muted, lineHeight: 20 }}>
+              Digite seu email cadastrado e enviaremos um link para redefinir sua senha.
+            </Text>
+            <View style={{ gap: 4 }}>
+              <Text style={authStyles.label}>Email</Text>
+              <TextInput style={authStyles.input} placeholder="seu@email.com" autoCapitalize="none"
+                keyboardType="email-address" value={email} onChangeText={setEmail} placeholderTextColor={C.muted} />
+            </View>
+            {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
+            <Pressable onPress={submit} disabled={loading}
+              style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}>
+              {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Enviar link</Text>}
             </Pressable>
           </View>
         )}
@@ -459,7 +384,7 @@ function ForgotPasswordScreen({ onBack }) {
   );
 }
 
-function LoginCodeScreen({ phone, onVerify, onCancel, loading, error }) {
+function LoginCodeScreen({ email, onVerify, onCancel, loading, error }) {
   const [code, setCode] = useState("");
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
@@ -467,7 +392,7 @@ function LoginCodeScreen({ phone, onVerify, onCancel, loading, error }) {
         <View style={{ gap: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: "700", color: C.primary, textTransform: "uppercase" }}>Verificação 2FA</Text>
           <Text style={{ fontSize: 24, fontWeight: "900", color: C.dark }}>Código de acesso</Text>
-          <Text style={{ color: C.muted }}>Enviamos um código por SMS para {phone || "seu celular"}</Text>
+          <Text style={{ color: C.muted }}>Enviamos um código para {email}</Text>
         </View>
         <View style={{ backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 20, gap: 14 }}>
           <TextInput style={[authStyles.input, { textAlign: "center", fontSize: 28, fontWeight: "900", letterSpacing: 8 }]}
@@ -503,9 +428,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [pendingLoginEmail, setPendingLoginEmail] = useState("");
-  const [pendingLoginPhone, setPendingLoginPhone] = useState("");
-  const [pendingVerifyPhone, setPendingVerifyPhone] = useState(""); // após cadastro
+  const [pendingEmail, setPendingEmail] = useState("");
   const [authScreen, setAuthScreen] = useState("login"); // "login" | "register" | "forgot"
 
   useEffect(() => {
@@ -522,11 +445,7 @@ export default function App() {
     setAuthError(""); setAuthLoading(true);
     try {
       const res = await apiLogin({ email, password });
-      if (res?.step === "code_required") {
-        setPendingLoginEmail(res.email || email);
-        setPendingLoginPhone(res.phone || "");
-        return;
-      }
+      if (res?.step === "code_required") { setPendingEmail(res.email || email); return; }
       if (res?.token) {
         await SecureStore.setItemAsync(TOKEN_KEY, res.token);
         setToken(res.token);
@@ -539,50 +458,40 @@ export default function App() {
   const handleVerifyCode = useCallback(async (code) => {
     setAuthError(""); setAuthLoading(true);
     try {
-      const res = await apiVerifyLoginCode({ email: pendingLoginEmail, code });
+      const res = await apiVerifyLoginCode({ email: pendingEmail, code });
       if (!res?.token) throw new Error("Token ausente.");
       await SecureStore.setItemAsync(TOKEN_KEY, res.token);
-      setToken(res.token); setUser(res.user || await apiMe(res.token));
-      setPendingLoginEmail(""); setPendingLoginPhone("");
+      setToken(res.token); setUser(res.user || await apiMe(res.token)); setPendingEmail("");
     } catch (e) { setAuthError(e?.message || "Código inválido."); }
     finally { setAuthLoading(false); }
-  }, [pendingLoginEmail]);
+  }, [pendingEmail]);
 
   const handleLogout = useCallback(async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    setToken(""); setUser(null); setAuthError("");
-    setPendingLoginEmail(""); setPendingLoginPhone(""); setPendingVerifyPhone("");
+    setToken(""); setUser(null); setAuthError(""); setPendingEmail("");
   }, []);
 
   const handleUserUpdate = useCallback((updated) => setUser(u => ({ ...u, ...updated })), []);
-
-  const goToLogin = () => { setAuthScreen("login"); setAuthError(""); setPendingVerifyPhone(""); };
 
   if (booting) {
     return (
       <SafeAreaView style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.bg }}>
         <View style={{ width: 88, height: 88, borderRadius: 24, backgroundColor: C.white, alignItems: "center", justifyContent: "center", marginBottom: 20, elevation: 4 }}>
-          <Image source={require("./assets/logoEDTECH.png")} style={{ width: 68, height: 68 }} resizeMode="contain" />
-        </View>
+        <Image source={require("./assets/logoEDTECH.png")} style={{ width: 68, height: 68 }} resizeMode="contain" />
+      </View>
         <ActivityIndicator size="large" color={C.primary} />
       </SafeAreaView>
     );
   }
 
   if (!token || !user) {
-    if (pendingLoginEmail) {
-      return <LoginCodeScreen phone={pendingLoginPhone} onVerify={handleVerifyCode}
-        onCancel={() => { setPendingLoginEmail(""); setPendingLoginPhone(""); setAuthError(""); }}
-        loading={authLoading} error={authError} />;
-    }
-    if (pendingVerifyPhone) {
-      return <VerifyPhoneScreen phone={pendingVerifyPhone}
-        onVerified={goToLogin}
-        onBack={() => setPendingVerifyPhone("")} />;
+    if (pendingEmail) {
+      return <LoginCodeScreen email={pendingEmail} onVerify={handleVerifyCode}
+        onCancel={() => { setPendingEmail(""); setAuthError(""); }} loading={authLoading} error={authError} />;
     }
     if (authScreen === "register") {
       return <RegisterScreen onBack={() => { setAuthScreen("login"); setAuthError(""); }}
-        onPendingVerification={(phone) => { setAuthScreen("login"); setPendingVerifyPhone(phone); }} />;
+        onRegistered={() => setAuthScreen("login")} />;
     }
     if (authScreen === "forgot") {
       return <ForgotPasswordScreen onBack={() => { setAuthScreen("login"); setAuthError(""); }} />;

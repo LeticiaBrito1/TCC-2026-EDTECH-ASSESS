@@ -13,27 +13,17 @@ const serializeUser = (row) => {
   };
 };
 
-export const createUser = async ({ id, full_name, email, password_hash, role, phone, verification_token, verification_expires }) => {
+export const createUser = async ({ id, full_name, email, password_hash, role, verification_token, verification_expires }) => {
   const { rows } = await query(
     `
       INSERT INTO app_users
-        (id, full_name, email, password_hash, role, active, token_version, email_verified, phone, verification_token, verification_expires)
-      VALUES ($1, $2, lower($3), $4, $5, TRUE, 0, FALSE, $6, $7, $8)
-      RETURNING id, full_name, email, role, active, email_verified, phone, created_at, updated_at
+        (id, full_name, email, password_hash, role, active, token_version, email_verified, verification_token, verification_expires)
+      VALUES ($1, $2, lower($3), $4, $5, TRUE, 0, FALSE, $6, $7)
+      RETURNING id, full_name, email, role, active, email_verified, created_at, updated_at
     `,
-    [id, full_name, email, password_hash, role, phone || null, verification_token, verification_expires]
+    [id, full_name, email, password_hash, role, verification_token, verification_expires]
   );
   return serializeUser(rows[0]);
-};
-
-export const findUserByPhone = async (phone) => {
-  const { rows } = await query(
-    `SELECT id, full_name, email, password_hash, role, active, email_verified, phone, token_version,
-            login_code, login_code_expires, reset_token, reset_token_expires, created_at, updated_at
-     FROM app_users WHERE phone = $1 LIMIT 1`,
-    [phone]
-  );
-  return rows[0] || null;
 };
 
 export const findUserByVerificationToken = async (token) => {
@@ -64,8 +54,8 @@ export const setVerificationToken = async (id, token, expires) => {
 export const findUserByEmail = async (email) => {
   const { rows } = await query(
     `
-      SELECT id, full_name, email, password_hash, role, active, email_verified, phone, token_version,
-             login_code, login_code_expires, reset_token, reset_token_expires, created_at, updated_at
+      SELECT id, full_name, email, password_hash, role, active, email_verified, token_version,
+             login_code, login_code_expires, created_at, updated_at
       FROM app_users
       WHERE lower(email) = lower($1)
       LIMIT 1

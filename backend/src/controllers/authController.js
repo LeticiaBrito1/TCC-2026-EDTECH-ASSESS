@@ -4,6 +4,7 @@ import { authService } from "../services/authService.js";
 import { auditService } from "../services/auditService.js";
 import { HttpError } from "../utils/httpError.js";
 
+// Mascara e-mail nos logs: user@example.com → u***@e***.com
 const maskEmail = (email) => {
   const str = String(email || "");
   const [local, domain] = str.split("@");
@@ -13,12 +14,6 @@ const maskEmail = (email) => {
   const maskedDomain = domainName[0] + "***";
   return `${maskedLocal}@${maskedDomain}.${tld.join(".")}`;
 };
-
-const phoneSchema = z
-  .string()
-  .min(10, "Telefone inválido.")
-  .max(20)
-  .regex(/^\+?[\d\s\-()]+$/, "Telefone inválido.");
 
 const registerSchema = z.object({
   full_name: z.string().min(2, "Nome deve ter ao menos 2 caracteres.").max(200).trim(),
@@ -31,12 +26,6 @@ const registerSchema = z.object({
       (val) => /[A-Za-z]/.test(val) && /[0-9]/.test(val),
       "A senha deve conter letras e números."
     ),
-  phone: phoneSchema,
-});
-
-const verifyPhoneSchema = z.object({
-  phone: phoneSchema,
-  code: z.string().length(6).regex(/^\d{6}$/),
 });
 
 const loginSchema = z.object({
@@ -67,12 +56,11 @@ const changePasswordSchema = z.object({
 });
 
 const forgotPasswordSchema = z.object({
-  phone: phoneSchema,
+  email: z.string().email("E-mail inválido."),
 });
 
 const resetPasswordSchema = z.object({
-  phone: phoneSchema,
-  code: z.string().length(6).regex(/^\d{6}$/),
+  token: z.string().min(1, "Token ausente."),
   nova_senha: z
     .string()
     .min(8, "A nova senha deve ter no mínimo 8 caracteres.")
@@ -86,15 +74,23 @@ const resetPasswordSchema = z.object({
 export const authController = {
   async register(req, res) {
     const parsed = registerSchema.safeParse(req.body);
-    if (!parsed.success) throw new HttpError(400, "Dados de cadastro inválidos.", parsed.error.flatten());
+    if (!parsed.success) {
+      throw new HttpError(400, "Dados de cadastro inválidos.", parsed.error.flatten());
+    }
+
     const result = await authService.register(parsed.data);
     res.status(201).json(result);
   },
 
-  async verifyPhone(req, res) {
-    const parsed = verifyPhoneSchema.safeParse(req.body);
-    if (!parsed.success) throw new HttpError(400, "Dados inválidos.", parsed.error.flatten());
-    const result = await authService.verifyPhone(parsed.data);
+  async verifyEmail(req, res) {
+    const token = String(req.query.token || "").trim();
+    const result = await authService.verifyEmail(token);
+    res.json(result);
+  },
+
+  async resendVerification(req, res) {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const result = await authService.resendVerification(email);
     res.json(result);
   },
 
@@ -102,14 +98,23 @@ export const authController = {
     const requestId = randomUUID().slice(0, 8);
     const startedAt = Date.now();
     const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) throw new HttpError(400, "Payload inválido.", parsed.error.flatten());
+    if (!parsed.success) {
+      console.warn(`[auth][${requestId}] Payload inválido no login.`, {
+        issues: parsed.error.issues?.length || 0,
+      });
+      throw new HttpError(400, "Payload inválido.", parsed.error.flatten());
+    }
 
-    console.log(`[auth][${requestId}] Tentativa de login.`, { email: maskEmail(parsed.data.email) });
+    console.log(`[auth][${requestId}] Tentativa de login.`, {
+      email: maskEmail(parsed.data.email),
+    });
 
     try {
       const payload = await authService.login(parsed.data);
+
+      // Código 2FA enviado — audit log ocorre em verifyLoginCode
       res.json(payload);
-      console.log(`[auth][${requestId}] Código 2FA enviado por SMS.`, {
+      console.log(`[auth][${requestId}] Código 2FA enviado.`, {
         email: maskEmail(parsed.data.email),
         duration_ms: Date.now() - startedAt,
       });
@@ -126,6 +131,7 @@ export const authController = {
   async verifyLoginCode(req, res) {
     const parsed = verifyLoginCodeSchema.safeParse(req.body);
     if (!parsed.success) throw new HttpError(400, "Dados inválidos.", parsed.error.flatten());
+
     const payload = await authService.verifyLoginCode(parsed.data);
     await auditService.log({
       userId: payload.user.id,
@@ -152,15 +158,15 @@ export const authController = {
 
   async forgotPassword(req, res) {
     const parsed = forgotPasswordSchema.safeParse(req.body);
-    if (!parsed.success) throw new HttpError(400, "Telefone inválido.", parsed.error.flatten());
-    const result = await authService.forgotPassword(parsed.data.phone.trim());
+    if (!parsed.success) throw new HttpError(400, "E-mail inválido.", parsed.error.flatten());
+    const result = await authService.forgotPassword(parsed.data.email.trim().toLowerCase());
     res.json(result);
   },
 
   async resetPassword(req, res) {
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) throw new HttpError(400, "Dados inválidos.", parsed.error.flatten());
-    const result = await authService.resetPassword(parsed.data.phone, parsed.data.code, parsed.data.nova_senha);
+    const result = await authService.resetPassword(parsed.data.token, parsed.data.nova_senha);
     res.json(result);
   },
 
@@ -168,11 +174,17 @@ export const authController = {
     const requestId = randomUUID().slice(0, 8);
     const startedAt = Date.now();
     const userId = req.user?.id;
+    console.log(`[auth][${requestId}] Consulta de sessão /auth/me.`, {
+      user_id: userId || null,
+    });
 
     try {
       const user = await authService.me(userId);
       res.json(user);
-      console.log(`[auth][${requestId}] Sessão válida.`, { user_id: user.id, duration_ms: Date.now() - startedAt });
+      console.log(`[auth][${requestId}] Sessão válida.`, {
+        user_id: user.id,
+        duration_ms: Date.now() - startedAt,
+      });
     } catch (error) {
       console.error(`[auth][${requestId}] Sessão inválida em /auth/me.`, {
         user_id: userId || null,

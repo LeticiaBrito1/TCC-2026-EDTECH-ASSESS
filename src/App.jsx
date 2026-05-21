@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useSearchParams, useNavigate } from 'react-router-dom';
 import { Suspense, useState, useEffect } from "react";
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -11,7 +11,7 @@ import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, CheckCircle2, XCircle, Loader2, ShieldCheck, KeyRound, Phone } from "lucide-react";
+import { Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck, KeyRound } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -79,15 +79,30 @@ const authPageWrapper = (children) => (
 
 /* ─── Tela de Login ─── */
 const LoginScreen = ({ onGoToRegister, onGoToForgot }) => {
-  const { login, isSubmittingLogin, authError } = useAuth();
+  const { login, isSubmittingLogin, authError, pendingVerificationEmail, clearPendingVerification } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resendStatus, setResendStatus] = useState(null); // null | "sending" | "sent"
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!email.trim() || !password) return;
     try { await login(email.trim(), password); } catch { /* refletido no contexto */ }
   };
+
+  const handleResend = async () => {
+    const target = pendingVerificationEmail || email;
+    if (!target) return;
+    setResendStatus("sending");
+    try {
+      await appClient.auth.resendVerification(target);
+      setResendStatus("sent");
+    } catch {
+      setResendStatus(null);
+    }
+  };
+
+  const isUnverified = authError?.type === "email_not_verified";
 
   return authPageWrapper(
     <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur">
@@ -117,6 +132,32 @@ const LoginScreen = ({ onGoToRegister, onGoToForgot }) => {
           </div>
         )}
 
+        {isUnverified && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <Mail className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">E-mail não confirmado</p>
+                <p className="text-sm text-amber-700 mt-0.5">
+                  Verifique sua caixa de entrada e clique no link de confirmação.
+                </p>
+              </div>
+            </div>
+            {resendStatus === "sent" ? (
+              <p className="text-xs text-teal-700 font-medium flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Novo link enviado! Verifique seu e-mail.
+              </p>
+            ) : (
+              <button type="button" onClick={handleResend} disabled={resendStatus === "sending"}
+                className="text-xs font-semibold text-amber-800 hover:underline flex items-center gap-1 disabled:opacity-50">
+                {resendStatus === "sending"
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Enviando...</>
+                  : <><RefreshCw className="h-3 w-3" /> Reenviar e-mail de confirmação</>}
+              </button>
+            )}
+          </div>
+        )}
+
         <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
           disabled={isSubmittingLogin || !email.trim() || !password}>
           {isSubmittingLogin ? "Entrando..." : "Entrar"}
@@ -141,45 +182,22 @@ const LoginScreen = ({ onGoToRegister, onGoToForgot }) => {
   );
 };
 
-/* ─── Tela de Esqueci a Senha (multi-step via SMS) ─── */
+/* ─── Tela de Esqueci a Senha ─── */
 const ForgotPasswordScreen = ({ onGoToLogin }) => {
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [novaSenha, setNovaSenha] = useState("");
-  const [confirmar, setConfirmar] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [step, setStep] = useState("phone"); // phone | reset | success
-  const [submitting, setSubmitting] = useState(false);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | sending | sent
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handleSendCode = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!phone.trim()) return;
-    setSubmitting(true); setErrorMsg("");
+    if (!email.trim()) return;
+    setStatus("sending"); setErrorMsg("");
     try {
-      await appClient.auth.forgotPassword(phone.trim());
-      setStep("reset");
+      await appClient.auth.forgotPassword(email.trim().toLowerCase());
+      setStatus("sent");
     } catch (err) {
-      setErrorMsg(err?.message || "Falha ao enviar código. Tente novamente.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleReset = async (e) => {
-    e.preventDefault();
-    setErrorMsg("");
-    if (novaSenha.length < 8) { setErrorMsg("A senha deve ter no mínimo 8 caracteres."); return; }
-    if (!/[A-Za-z]/.test(novaSenha) || !/[0-9]/.test(novaSenha)) { setErrorMsg("A senha deve conter letras e números."); return; }
-    if (novaSenha !== confirmar) { setErrorMsg("As senhas não coincidem."); return; }
-    setSubmitting(true);
-    try {
-      await appClient.auth.resetPassword(phone.trim(), code.trim(), novaSenha);
-      setStep("success");
-    } catch (err) {
-      setErrorMsg(err?.message || "Não foi possível redefinir a senha.");
-    } finally {
-      setSubmitting(false);
+      setErrorMsg(err?.message || "Falha ao enviar. Tente novamente.");
+      setStatus("idle");
     }
   };
 
@@ -191,17 +209,29 @@ const ForgotPasswordScreen = ({ onGoToLogin }) => {
       <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Recuperação</p>
       <h2 className="text-3xl font-black text-slate-950 mb-3">Esqueci minha senha</h2>
 
-      {step === "phone" && (
+      {status === "sent" ? (
+        <>
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-teal-50">
+            <CheckCircle2 className="h-7 w-7 text-teal-600" />
+          </div>
+          <p className="text-slate-600 text-sm leading-relaxed mb-6">
+            Se o e-mail estiver cadastrado e verificado, você receberá um link para redefinir a senha em breve. Verifique também a pasta de spam.
+          </p>
+          <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Voltar para o login
+          </Button>
+        </>
+      ) : (
         <>
           <p className="text-slate-600 text-sm leading-relaxed mb-6">
-            Informe o celular cadastrado. Enviaremos um código por SMS.
+            Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha.
           </p>
-          <form className="w-full space-y-4" onSubmit={handleSendCode}>
+          <form className="w-full space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2 text-left">
-              <Label htmlFor="forgot-phone">Celular (com DDD)</Label>
-              <Input id="forgot-phone" type="tel" autoComplete="tel"
-                placeholder="+55 11 99999-9999" value={phone}
-                onChange={(e) => setPhone(e.target.value)} />
+              <Label htmlFor="forgot-email">E-mail</Label>
+              <Input id="forgot-email" type="email" autoComplete="email"
+                placeholder="voce@escola.com" value={email}
+                onChange={(e) => setEmail(e.target.value)} />
             </div>
             {errorMsg && (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -209,8 +239,10 @@ const ForgotPasswordScreen = ({ onGoToLogin }) => {
               </div>
             )}
             <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
-              disabled={submitting || !phone.trim()}>
-              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</> : "Enviar código por SMS"}
+              disabled={status === "sending" || !email.trim()}>
+              {status === "sending"
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</>
+                : "Enviar link de redefinição"}
             </Button>
           </form>
           <button type="button" onClick={onGoToLogin}
@@ -219,90 +251,18 @@ const ForgotPasswordScreen = ({ onGoToLogin }) => {
           </button>
         </>
       )}
-
-      {step === "reset" && (
-        <>
-          <p className="text-slate-600 text-sm leading-relaxed mb-1">
-            Código enviado para o celular:
-          </p>
-          <p className="font-semibold text-slate-900 text-base mb-6">{phone}</p>
-          <form className="w-full space-y-4 text-left" onSubmit={handleReset}>
-            <div className="space-y-2">
-              <Label htmlFor="rp-code">Código SMS</Label>
-              <input
-                id="rp-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
-                className="w-full text-center text-3xl font-black tracking-[0.5em] border-2 border-slate-200 rounded-2xl py-3 px-4 focus:outline-none focus:border-cyan-500 transition-colors"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rp-password">Nova senha</Label>
-              <div className="relative">
-                <Input id="rp-password" type={showPw ? "text" : "password"}
-                  autoComplete="new-password" placeholder="Mín. 8 caracteres, letras e números"
-                  value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
-                <button type="button" tabIndex={-1}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                  onClick={() => setShowPw(v => !v)}>
-                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rp-confirm">Confirmar nova senha</Label>
-              <Input id="rp-confirm" type="password" autoComplete="new-password"
-                placeholder="Repita a nova senha" value={confirmar}
-                onChange={(e) => setConfirmar(e.target.value)} />
-            </div>
-            {errorMsg && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                {errorMsg}
-              </div>
-            )}
-            <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
-              disabled={submitting || code.length !== 6 || !novaSenha || !confirmar}>
-              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : "Redefinir senha"}
-            </Button>
-            <button type="button" onClick={() => { setStep("phone"); setErrorMsg(""); }}
-              className="w-full text-center text-sm text-slate-500 hover:text-slate-800 hover:underline py-1">
-              Voltar
-            </button>
-          </form>
-        </>
-      )}
-
-      {step === "success" && (
-        <>
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-teal-50">
-            <CheckCircle2 className="h-7 w-7 text-teal-600" />
-          </div>
-          <p className="text-slate-600 text-sm leading-relaxed mb-6">
-            Senha redefinida com sucesso! Faça login com a nova senha.
-          </p>
-          <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
-            Ir para o login
-          </Button>
-        </>
-      )}
     </section>
   );
 };
 
-/* ─── Tela de Redefinir Senha (via código SMS) ─── */
+/* ─── Tela de Redefinir Senha (via link do e-mail) ─── */
 const ResetPasswordScreen = ({ onGoToLogin }) => {
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token") || "";
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmar, setConfirmar] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [status, setStatus] = useState("idle"); // idle | sending | success
+  const [status, setStatus] = useState("idle"); // idle | sending | success | error
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleSubmit = async (e) => {
@@ -313,13 +273,26 @@ const ResetPasswordScreen = ({ onGoToLogin }) => {
     if (novaSenha !== confirmar) { setErrorMsg("As senhas não coincidem."); return; }
     setStatus("sending");
     try {
-      await appClient.auth.resetPassword(phone.trim(), code.trim(), novaSenha);
+      await appClient.auth.resetPassword(token, novaSenha);
       setStatus("success");
     } catch (err) {
       setErrorMsg(err?.message || "Não foi possível redefinir a senha.");
-      setStatus("idle");
+      setStatus("error");
     }
   };
+
+  if (!token) return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-red-50">
+        <XCircle className="h-10 w-10 text-red-500" />
+      </div>
+      <h2 className="text-3xl font-black text-slate-950 mb-3">Link inválido</h2>
+      <p className="text-slate-600 text-sm mb-8">O link de redefinição não contém um token válido.</p>
+      <Button variant="outline" className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+        Voltar para o login
+      </Button>
+    </section>
+  );
 
   return authPageWrapper(
     <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
@@ -341,26 +314,6 @@ const ResetPasswordScreen = ({ onGoToLogin }) => {
         </>
       ) : (
         <form className="w-full space-y-4 text-left" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="rp-phone">Celular cadastrado</Label>
-            <Input id="rp-phone" type="tel" autoComplete="tel"
-              placeholder="+55 11 99999-9999"
-              value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rp-code">Código SMS</Label>
-            <input
-              id="rp-code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="000000"
-              className="w-full text-center text-3xl font-black tracking-[0.5em] border-2 border-slate-200 rounded-2xl py-3 px-4 focus:outline-none focus:border-cyan-500 transition-colors"
-            />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="rp-password">Nova senha</Label>
             <div className="relative">
@@ -386,7 +339,7 @@ const ResetPasswordScreen = ({ onGoToLogin }) => {
             </div>
           )}
           <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
-            disabled={status === "sending" || !phone.trim() || code.length !== 6 || !novaSenha || !confirmar}>
+            disabled={status === "sending" || !novaSenha || !confirmar}>
             {status === "sending"
               ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</>
               : "Salvar nova senha"}
@@ -404,7 +357,7 @@ const ResetPasswordScreen = ({ onGoToLogin }) => {
 /* ─── Tela de Cadastro ─── */
 const RegisterScreen = ({ onGoToLogin }) => {
   const { register, isSubmittingRegister, authError } = useAuth();
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", password: "", confirm_password: "" });
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm_password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -412,7 +365,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setLocalError("");
-    if (!form.full_name.trim() || !form.email.trim() || !form.phone.trim() || !form.password) {
+    if (!form.full_name.trim() || !form.email.trim() || !form.password) {
       setLocalError("Preencha todos os campos obrigatórios."); return;
     }
     if (form.full_name.trim().length < 2) {
@@ -431,7 +384,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
       setLocalError("Você deve aceitar os termos de privacidade para criar uma conta."); return;
     }
     try {
-      await register({ full_name: form.full_name.trim(), email: form.email.trim(), phone: form.phone.trim(), password: form.password });
+      await register({ full_name: form.full_name.trim(), email: form.email.trim(), password: form.password });
     } catch { /* refletido no contexto */ }
   };
 
@@ -443,7 +396,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
         <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700">Cadastro</p>
         <h2 className="mt-3 text-3xl font-black text-slate-950">Criar conta</h2>
         <p className="mt-3 text-sm text-slate-600">
-          Preencha os dados abaixo. Você receberá um código de verificação por SMS.
+          Preencha os dados abaixo. Você receberá um e-mail de confirmação.
         </p>
       </div>
 
@@ -457,11 +410,6 @@ const RegisterScreen = ({ onGoToLogin }) => {
           <Label htmlFor="reg-email">E-mail *</Label>
           <Input id="reg-email" type="email" autoComplete="email" placeholder="voce@escola.com"
             value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="reg-phone">Celular (com DDD) *</Label>
-          <Input id="reg-phone" type="tel" autoComplete="tel" placeholder="+55 11 99999-9999"
-            value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="reg-password">Senha *</Label>
@@ -522,9 +470,9 @@ const RegisterScreen = ({ onGoToLogin }) => {
   );
 };
 
-/* ─── Tela de Código de Login 2FA (SMS) ─── */
+/* ─── Tela de Código de Login 2FA ─── */
 const LoginCodeScreen = ({ onCancel }) => {
-  const { verifyLoginCode, cancelLoginCode, isSubmittingLoginCode, authError, pendingLoginPhone } = useAuth();
+  const { verifyLoginCode, cancelLoginCode, isSubmittingLoginCode, authError, pendingLoginEmail } = useAuth();
   const [code, setCode] = useState("");
 
   const handleCancel = () => {
@@ -551,9 +499,9 @@ const LoginCodeScreen = ({ onCancel }) => {
       <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Verificação</p>
       <h2 className="text-3xl font-black text-slate-950 mb-3">Código de acesso</h2>
       <p className="text-slate-600 text-sm leading-relaxed mb-1">
-        Enviamos um código de 6 dígitos por SMS para:
+        Enviamos um código de 6 dígitos para:
       </p>
-      <p className="font-semibold text-slate-900 text-base mb-6">{pendingLoginPhone || "seu celular"}</p>
+      <p className="font-semibold text-slate-900 text-base mb-6">{pendingLoginEmail || "seu e-mail"}</p>
 
       <form className="w-full space-y-4" onSubmit={handleSubmit}>
         <input
@@ -590,84 +538,114 @@ const LoginCodeScreen = ({ onCancel }) => {
   );
 };
 
-/* ─── Tela de Verificação de Celular (após cadastro) ─── */
-const VerifyPhoneScreen = ({ onGoToLogin }) => {
-  const { verifyPhone, isSubmittingVerifyPhone, authError, pendingVerificationPhone } = useAuth();
-  const [code, setCode] = useState("");
-  const [verified, setVerified] = useState(false);
+/* ─── Tela de Aguardando Verificação (após cadastro) ─── */
+const VerifyEmailPendingScreen = ({ onGoToLogin }) => {
+  const { pendingVerificationEmail } = useAuth();
+  const [resendStatus, setResendStatus] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (code.length !== 6) return;
+  const handleResend = async () => {
+    if (!pendingVerificationEmail) return;
+    setResendStatus("sending");
     try {
-      await verifyPhone(code);
-      setVerified(true);
-    } catch { /* refletido no contexto */ }
+      await appClient.auth.resendVerification(pendingVerificationEmail);
+      setResendStatus("sent");
+    } catch {
+      setResendStatus(null);
+    }
   };
-
-  if (verified) return authPageWrapper(
-    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
-      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
-        <CheckCircle2 className="h-10 w-10 text-teal-600" />
-      </div>
-      <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Verificado!</p>
-      <h2 className="text-3xl font-black text-slate-950 mb-3">Conta ativada</h2>
-      <p className="text-slate-600 text-sm mb-8">Seu celular foi verificado. Agora você pode fazer login.</p>
-      <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
-        Ir para o login
-      </Button>
-    </section>
-  );
 
   return authPageWrapper(
     <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
-      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-cyan-50">
-        <Phone className="h-10 w-10 text-cyan-600" />
+      <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
+        <Mail className="h-10 w-10 text-teal-600" />
       </div>
       <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Quase lá!</p>
-      <h2 className="text-3xl font-black text-slate-950 mb-3">Verifique seu celular</h2>
-      <p className="text-slate-600 text-sm leading-relaxed mb-1">
-        Enviamos um código de 6 dígitos por SMS para:
+      <h2 className="text-3xl font-black text-slate-950 mb-3">Confirme seu e-mail</h2>
+      <p className="text-slate-600 text-sm leading-relaxed mb-2">
+        Enviamos um link de confirmação para:
       </p>
       <p className="font-semibold text-slate-900 text-base mb-6">
-        {pendingVerificationPhone || "seu celular"}
+        {pendingVerificationEmail || "seu e-mail"}
+      </p>
+      <p className="text-slate-500 text-sm mb-8">
+        Clique no link recebido para ativar sua conta e fazer login. Verifique também a pasta de spam.
       </p>
 
-      <form className="w-full space-y-4" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          placeholder="000000"
-          className="w-full text-center text-4xl font-black tracking-[0.5em] border-2 border-slate-200 rounded-2xl py-4 px-4 focus:outline-none focus:border-cyan-500 transition-colors"
-          autoFocus
-        />
-
-        {authError?.type === "verify_phone_failed" && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            {authError.message}
+      <div className="w-full space-y-3">
+        {resendStatus === "sent" ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-medium text-teal-800">
+            <CheckCircle2 className="h-4 w-4" /> Novo link enviado com sucesso!
           </div>
+        ) : (
+          <Button variant="outline" className="w-full h-11 rounded-2xl text-sm"
+            onClick={handleResend} disabled={resendStatus === "sending"}>
+            {resendStatus === "sending"
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Reenviando...</>
+              : <><RefreshCw className="h-4 w-4 mr-2" />Reenviar e-mail de confirmação</>}
+          </Button>
         )}
 
-        <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
-          disabled={isSubmittingVerifyPhone || code.length !== 6}>
-          {isSubmittingVerifyPhone
-            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Verificando...</>
-            : "Confirmar código"}
-        </Button>
-      </form>
-
-      <button type="button" onClick={onGoToLogin}
-        className="mt-4 text-sm text-slate-500 hover:text-slate-800 hover:underline py-2">
-        Voltar para o login
-      </button>
+        <button type="button" onClick={onGoToLogin}
+          className="w-full text-sm text-slate-500 hover:text-slate-800 hover:underline py-2">
+          Voltar para o login
+        </button>
+      </div>
     </section>
   );
 };
 
+/* ─── Tela de Verificação de Token (rota /verify-email?token=xxx) ─── */
+const VerifyEmailCallbackScreen = ({ onGoToLogin }) => {
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState("loading"); // loading | success | error
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const token = searchParams.get("token");
+    if (!token) { setStatus("error"); setMessage("Token de verificação ausente."); return; }
+
+    appClient.auth.verifyEmail(token)
+      .then((res) => { setStatus("success"); setMessage(res?.message || "E-mail confirmado!"); })
+      .catch((err) => { setStatus("error"); setMessage(err?.message || "Link inválido ou expirado."); });
+  }, []);
+
+  return authPageWrapper(
+    <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/70 backdrop-blur flex flex-col items-center text-center">
+      {status === "loading" && (
+        <>
+          <Loader2 className="h-16 w-16 text-teal-500 animate-spin mb-6" />
+          <h2 className="text-2xl font-black text-slate-950 mb-2">Verificando seu e-mail...</h2>
+          <p className="text-slate-500 text-sm">Aguarde um instante.</p>
+        </>
+      )}
+      {status === "success" && (
+        <>
+          <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-teal-50">
+            <CheckCircle2 className="h-10 w-10 text-teal-600" />
+          </div>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-teal-700 mb-3">Confirmado!</p>
+          <h2 className="text-3xl font-black text-slate-950 mb-3">E-mail verificado</h2>
+          <p className="text-slate-600 text-sm mb-8">{message}</p>
+          <Button className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Ir para o login
+          </Button>
+        </>
+      )}
+      {status === "error" && (
+        <>
+          <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-red-50">
+            <XCircle className="h-10 w-10 text-red-500" />
+          </div>
+          <h2 className="text-3xl font-black text-slate-950 mb-3">Link inválido</h2>
+          <p className="text-slate-600 text-sm mb-8">{message}</p>
+          <Button variant="outline" className="h-12 w-full rounded-2xl text-sm font-bold" onClick={onGoToLogin}>
+            Voltar para o login
+          </Button>
+        </>
+      )}
+    </section>
+  );
+};
 
 /* ─── App autenticado principal ─── */
 const AuthenticatedApp = () => {
@@ -688,14 +666,15 @@ const AuthenticatedApp = () => {
   // Só exibe o app principal se o usuário estiver autenticado
   if (!isAuthenticated) {
     if (authError?.type === 'user_not_registered') return <UserNotRegisteredError />;
-    if (authError?.type === 'verify_phone_pending' || authError?.type === 'verify_phone_failed') {
-      return <VerifyPhoneScreen onGoToLogin={goToLogin} />;
-    }
+    if (authError?.type === 'verify_email_pending') return <VerifyEmailPendingScreen onGoToLogin={goToLogin} />;
     if (authError?.type === 'login_code_required' || authError?.type === 'login_code_failed') {
       return <LoginCodeScreen onCancel={goToLogin} />;
     }
     if (showForgot) return <ForgotPasswordScreen onGoToLogin={goToLogin} />;
     if (showRegister) return <RegisterScreen onGoToLogin={goToLogin} />;
+    if (authError?.type === 'email_not_verified') {
+      return <LoginScreen onGoToRegister={() => setShowRegister(true)} onGoToForgot={() => setShowForgot(true)} />;
+    }
     return <LoginScreen onGoToRegister={() => setShowRegister(true)} onGoToForgot={() => setShowForgot(true)} />;
   }
 
@@ -715,13 +694,21 @@ const AuthenticatedApp = () => {
   );
 };
 
-/* ─── Wrapper de rotas públicas ─── */
+/* ─── Wrapper que captura /verify-email antes da auth ─── */
 const AppRouter = () => {
+  const { clearPendingVerification } = useAuth();
   const navigate = useNavigate();
 
   return (
     <Routes>
-      {/* Rota pública de redefinição de senha via SMS */}
+      {/* Rota pública de verificação de e-mail */}
+      <Route path="/verify-email" element={
+        <VerifyEmailCallbackScreen onGoToLogin={() => {
+          clearPendingVerification();
+          navigate("/");
+        }} />
+      } />
+      {/* Rota pública de redefinição de senha */}
       <Route path="/reset-password" element={
         <ResetPasswordScreen onGoToLogin={() => navigate("/")} />
       } />
