@@ -1,0 +1,63 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL }}
+          VITE_AI_FUNCTION_NAME: gerar_questoes_ia
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy backend
+        run: |
+          ssh -i ~/.ssh/ec2.pem ubuntu@${{ secrets.EC2_HOST }} bash << 'ENDSSH'
+            set -e
+            cd ~/edtech-repo
+            git pull origin main
+            cd backend
+            npm ci --omit=dev
+            pm2 restart edtech-backend
+            pm2 save
+          ENDSSH
+
+      - name: Upload frontend dist
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no" \
+            dist/ ubuntu@${{ secrets.EC2_HOST }}:/tmp/edtech-dist-new/
+
+      - name: Swap frontend on server
+        run: |
+          ssh -i ~/.ssh/ec2.pem ubuntu@${{ secrets.EC2_HOST }} bash << 'ENDSSH'
+            sudo rm -rf /var/www/edtech/dist
+            sudo mv /tmp/edtech-dist-new /var/www/edtech/dist
+            sudo chown -R www-data:www-data /var/www/edtech/dist
+            sudo chmod -R 755 /var/www/edtech/dist
+          ENDSSH
