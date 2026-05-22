@@ -12,6 +12,9 @@ import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
 import QrCodeScanner from "@/components/shared/QrCodeScanner";
 
+const stripLeadingNumber = (text) =>
+  String(text || "").trim().replace(/^\d+\s*[.)\-]\s*/, "");
+
 const AVALIACAO_KEYS = ["avaliacao_id", "avaliacaoId", "prova_id", "provaId", "avaliacao", "prova"];
 const ALUNO_KEYS = ["aluno_id", "alunoId", "student_id", "studentId", "aluno", "student"];
 const VERSAO_KEYS = ["versao", "versão", "version", "prova_versao", "provaVersao"];
@@ -173,7 +176,8 @@ export default function Correcao() {
     const respostasArray = questoesAvaliacao.map(q => ({
       questao_id: q.id,
       resposta: respostas[q.id] || "",
-      correta: respostas[q.id] === q.gabarito
+      correta: Boolean(respostas[q.id]) &&
+        (respostas[q.id] || "").toUpperCase().trim() === (q.gabarito || "").toUpperCase().trim()
     }));
 
     const totalAcertos = respostasArray.filter(r => r.correta).length;
@@ -533,7 +537,7 @@ export default function Correcao() {
                   {questoesAvaliacao.map((q, idx) => (
                     <div key={q.id} className="p-4 border rounded-xl">
                       <p className="text-sm font-medium text-foreground mb-3">
-                        <span className="text-primary font-semibold">Q{idx + 1}.</span> {q.enunciado?.slice(0, 120)}{q.enunciado?.length > 120 ? "..." : ""}
+                        <span className="text-primary font-semibold">Q{idx + 1}.</span> {stripLeadingNumber(q.enunciado).slice(0, 120)}{stripLeadingNumber(q.enunciado).length > 120 ? "..." : ""}
                       </p>
                       <div className="flex gap-2 flex-wrap">
                         {q.alternativas?.map(a => (
@@ -615,20 +619,23 @@ export default function Correcao() {
             <div className="text-left max-w-md mx-auto space-y-2">
               {result.respostas?.map((r, idx) => {
                 const questao = questoes.find(q => q.id === r.questao_id);
-                const gabarito = questao?.gabarito || "?";
+                const gabarito = (questao?.gabarito || "?").toUpperCase().trim();
+                const isCorrect = Boolean(r.correta) ||
+                  (Boolean(r.resposta) &&
+                    (r.resposta || "").toUpperCase().trim() === gabarito);
                 return (
-                  <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${r.correta ? 'bg-success/5' : 'bg-destructive/5'}`}>
+                  <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${isCorrect ? 'bg-success/5' : 'bg-destructive/5'}`}>
                     <span className="text-sm font-medium">Questão {idx + 1}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-muted-foreground">
-                        Marcou: <strong>{r.resposta || "—"}</strong>
+                        Marcou: <strong>{(r.resposta || "—").toUpperCase()}</strong>
                       </span>
-                      {!r.correta && (
+                      {!isCorrect && (
                         <span className="text-sm text-success">
                           Correto: <strong>{gabarito}</strong>
                         </span>
                       )}
-                      {r.correta
+                      {isCorrect
                         ? <CheckCircle2 className="w-4 h-4 text-success" />
                         : <XCircle className="w-4 h-4 text-destructive" />}
                     </div>

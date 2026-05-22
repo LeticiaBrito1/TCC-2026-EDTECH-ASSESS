@@ -76,8 +76,19 @@ const versionLabelFromIndex = (index) => {
 
 const drawCoverPage = async ({ doc, assessment, disciplinaNome, turmaNome, aluno, versionLabel, qrPayload, versionQuestions }) => {
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = PAGE.margin;
   let y = margin;
+
+  // Registration marks for OMR (5x5mm black squares, 3mm from each corner)
+  const regSize = 5;
+  const regInset = 3;
+  doc.setFillColor(0, 0, 0);
+  doc.rect(regInset, regInset, regSize, regSize, "F");
+  doc.rect(pageWidth - regInset - regSize, regInset, regSize, regSize, "F");
+  doc.rect(regInset, pageHeight - regInset - regSize, regSize, regSize, "F");
+  doc.rect(pageWidth - regInset - regSize, pageHeight - regInset - regSize, regSize, regSize, "F");
+  doc.setFillColor(0);
 
   // Title
   doc.setFont("helvetica", "bold");
@@ -171,6 +182,9 @@ const drawCoverPage = async ({ doc, assessment, disciplinaNome, turmaNome, aluno
   return y + Math.ceil(versionQuestions.length / cols) * 12 + 4;
 };
 
+const stripLeadingNumber = (text) =>
+  String(text || "").trim().replace(/^\d+\s*[.)\-]\s*/, "");
+
 const drawQuestion = ({ doc, question, index, cursorY, peso }) => {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -186,7 +200,7 @@ const drawQuestion = ({ doc, question, index, cursorY, peso }) => {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   const pesoStr = peso != null ? ` (${Number(peso)} pt${Number(peso) !== 1 ? "s" : ""})` : "";
-  const enunciado = `${index + 1}.${pesoStr} ${String(question.enunciado || "").trim()}`;
+  const enunciado = `${index + 1}.${pesoStr} ${stripLeadingNumber(question.enunciado)}`;
   const qLines = doc.splitTextToSize(enunciado, maxWidth);
   ensureSpace(qLines.length * PAGE.lineHeight + 8);
   doc.text(qLines, PAGE.margin, y);
@@ -208,71 +222,78 @@ const drawQuestion = ({ doc, question, index, cursorY, peso }) => {
 };
 
 const drawAnswerKeyPage = ({ doc, assessment, versionLabel, versionQuestions }) => {
-  doc.addPage();
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = PAGE.margin;
-  let y = margin;
 
-  // Fundo cinza claro no cabeçalho
-  doc.setFillColor(230, 230, 230);
-  doc.rect(0, 0, pageWidth, 22, "F");
+  const initFirstPage = () => {
+    doc.addPage();
+    doc.setFillColor(230, 230, 230);
+    doc.rect(0, 0, pageWidth, 22, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(30, 30, 30);
+    doc.text("GABARITO DO PROFESSOR", margin, margin + 5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`${assessment.titulo || "Avaliação"} — Versão ${versionLabel}`, margin, margin + 12);
+    doc.text("USO EXCLUSIVO DO PROFESSOR — NÃO DISTRIBUIR", pageWidth - margin, margin + 12, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+    const startY = 30;
+    doc.setDrawColor(150);
+    doc.line(margin, startY, pageWidth - margin, startY);
+    return startY + 8;
+  };
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(30, 30, 30);
-  doc.text("GABARITO DO PROFESSOR", margin, y + 5);
+  const initContinuationPage = () => {
+    doc.addPage();
+    const contY = margin + 6;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(
+      `Gabarito — ${assessment.titulo || "Avaliação"} — Versão ${versionLabel} (continuação)`,
+      margin,
+      contY
+    );
+    doc.setTextColor(0, 0, 0);
+    return contY + 8;
+  };
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text(`${assessment.titulo || "Avaliação"} — Versão ${versionLabel}`, margin, y + 12);
-  doc.text("USO EXCLUSIVO DO PROFESSOR — NÃO DISTRIBUIR", pageWidth - margin, y + 12, { align: "right" });
+  let y = initFirstPage();
+  let isFirstPage = true;
 
-  doc.setTextColor(0, 0, 0);
-  y = 30;
-
-  // Linha separadora
-  doc.setDrawColor(150);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
-
-  // Grade de respostas com círculos visuais
   const letters = ["A", "B", "C", "D", "E"];
   const circleR = 3.5;
-  const circleSpacing = 9;
-  const cols = 3;
-  const colWidth = (pageWidth - margin * 2) / cols;
-  const rowHeight = 14;
+  const circleSpacing = 10;
+  const rowHeight = 12;
 
-  versionQuestions.forEach((q, idx) => {
-    const col = idx % cols;
-    const row = Math.floor(idx / cols);
-    const x = margin + col * colWidth;
-    const qy = y + row * rowHeight;
+  for (let idx = 0; idx < versionQuestions.length; idx += 1) {
+    if (y + rowHeight > pageHeight - margin - 20) {
+      isFirstPage = false;
+      y = initContinuationPage();
+    }
 
-    if (qy + rowHeight > doc.internal.pageSize.getHeight() - margin) return;
-
+    const q = versionQuestions[idx];
     const gabarito = String(q.gabarito || "").toUpperCase();
-    const alts = q.alternativas?.length > 0 ? q.alternativas.map(a => a.letra) : letters;
+    const alts = q.alternativas?.length > 0 ? q.alternativas.map((a) => a.letra) : letters;
 
-    // Número da questão
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(30, 30, 30);
-    doc.text(`${idx + 1}.`, x, qy);
+    doc.text(`${idx + 1}.`, margin, y);
 
     alts.forEach((letra, li) => {
-      const cx = x + 8 + li * circleSpacing;
-      const cy = qy - 2.5;
+      const cx = margin + 12 + li * circleSpacing;
+      const cy = y - 3;
       const isCorrect = letra === gabarito;
 
       if (isCorrect) {
-        // Círculo preenchido para a resposta correta
         doc.setFillColor(30, 30, 30);
         doc.circle(cx, cy, circleR, "F");
         doc.setTextColor(255, 255, 255);
       } else {
-        // Círculo vazio para as erradas
         doc.setDrawColor(150);
         doc.circle(cx, cy, circleR, "S");
         doc.setTextColor(160, 160, 160);
@@ -283,31 +304,29 @@ const drawAnswerKeyPage = ({ doc, assessment, versionLabel, versionQuestions }) 
       doc.text(letra, cx - 1.5, cy + 0.5);
     });
 
-    // Reset cores
     doc.setTextColor(0, 0, 0);
     doc.setDrawColor(0, 0, 0);
-  });
+    y += rowHeight;
+  }
 
-  // Resumo do gabarito em texto simples abaixo da grade
-  const totalRows = Math.ceil(versionQuestions.length / cols);
-  let resumoY = y + totalRows * rowHeight + 6;
-
+  // Resumo em texto
+  y += 4;
+  if (y + 18 > pageHeight - margin) {
+    y = initContinuationPage();
+  }
   doc.setDrawColor(180);
-  doc.line(margin, resumoY, pageWidth - margin, resumoY);
-  resumoY += 6;
-
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 6;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(60, 60, 60);
-  doc.text("Respostas:", margin, resumoY);
-  resumoY += 5;
-
+  doc.text("Respostas:", margin, y);
+  y += 5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   const summaryEntries = versionQuestions.map((q, i) => `${i + 1}:${q.gabarito || "—"}`);
-  const summaryLine = summaryEntries.join("  ");
-  const summaryLines = doc.splitTextToSize(summaryLine, pageWidth - margin * 2);
-  doc.text(summaryLines, margin, resumoY);
+  const summaryLines = doc.splitTextToSize(summaryEntries.join("  "), pageWidth - margin * 2);
+  doc.text(summaryLines, margin, y);
   doc.setTextColor(0, 0, 0);
 };
 

@@ -5,6 +5,7 @@ import { entityService } from "./entityService.js";
 import { auditService } from "./auditService.js";
 import { HttpError } from "../utils/httpError.js";
 import { env } from "../config/env.js";
+import { detectAnswersOMR } from "./omrService.js";
 
 const LETTER_OPTIONS = new Set(["A", "B", "C", "D", "E"]);
 const GROQ_VISION_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct";
@@ -15,6 +16,69 @@ const isValidUuid = (v) => UUID_REGEX.test(String(v || ""));
 const groqVision = env.groqApiKey
   ? new OpenAI({ apiKey: env.groqApiKey, baseURL: "https://api.groq.com/openai/v1" })
   : null;
+
+// ---------------------------------------------------------------------------
+// Algoritmo de embaralhamento determinístico (espelhado do PDF generator)
+// ---------------------------------------------------------------------------
+
+const hashSeed = (value) => {
+  const text = String(value || "");
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const mulberry32 = (seed) => {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6d2b79f5;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const shuffledArray = (items, random) => {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+const buildVersionQuestions = ({ questions, versionSeed, shuffleQuestions = false, shuffleAlternatives = false }) => {
+  const random = mulberry32(versionSeed);
+  const sourceList = shuffleQuestions ? shuffledArray(questions, random) : [...questions];
+
+  return sourceList.map((question) => {
+    let gabarito = String(question.gabarito || "A").toUpperCase();
+
+    if (shuffleAlternatives && Array.isArray(question.alternativas) && question.alternativas.length > 0) {
+      const originalList = question.alternativas.map((item, index) => ({
+        letra: String(item?.letra || String.fromCharCode(65 + index)).toUpperCase(),
+        texto: String(item?.texto || "").trim(),
+      })).filter((item) => item.texto);
+
+      const shuffledAlts = shuffledArray(originalList, random).map((item, index) => ({
+        letra: String.fromCharCode(65 + index),
+        texto: item.texto,
+        originalLetra: item.letra,
+      }));
+
+      const found = shuffledAlts.find((alt) => alt.originalLetra === gabarito);
+      gabarito = found?.letra || shuffledAlts[0]?.letra || "A";
+
+      return { ...question, alternativas: shuffledAlts, gabarito };
+    }
+
+    return { ...question, gabarito };
+  });
+};
 
 // ---------------------------------------------------------------------------
 // Utilitários de imagem
@@ -186,6 +250,38 @@ const runTesseract = async (imageBuffer) => {
 };
 
 // ---------------------------------------------------------------------------
+// Moderação de conteúdo — rejeita imagens com conteúdo explícito/pornográfico
+// ---------------------------------------------------------------------------
+
+const checkExplicitContent = async (dataUrl) => {
+  if (!groqVision) return false;
+  try {
+    const response = await groqVision.chat.completions.create({
+      model: GROQ_VISION_FALLBACK,
+      max_tokens: 5,
+      temperature: 0,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: dataUrl, detail: "low" } },
+            {
+              type: "text",
+              text: "Does this image contain pornographic, sexually explicit, nudity, or violent content? Answer only YES or NO.",
+            },
+          ],
+        },
+      ],
+    });
+    const answer = (response.choices?.[0]?.message?.content || "").toUpperCase().trim();
+    return answer.startsWith("YES");
+  } catch (err) {
+    console.warn("[moderation] Falha na verificação de conteúdo:", err.message);
+    return false;
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Monta o objeto de correção a partir das respostas detectadas
 // ---------------------------------------------------------------------------
 
@@ -243,25 +339,65 @@ export const correctionService = {
     if (imageBase64) {
       const { buffer, dataUrl } = decodeImage(imageBase64);
 
-      // Tenta modelo principal com hint do total de questões
-      let visionResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_MODEL);
-
-      // Fallback para modelo secundário se o principal falhou
-      if (!visionResult) {
-        console.log("[vision] Tentando modelo fallback...");
-        visionResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_FALLBACK);
+      // Moderação: rejeita imagens com conteúdo explícito
+      const isExplicit = await checkExplicitContent(dataUrl);
+      if (isExplicit) {
+        throw new HttpError(
+          422,
+          "A imagem enviada contém conteúdo inapropriado e não pode ser processada. " +
+          "Envie apenas fotos de folhas de resposta."
+        );
       }
 
-      if (visionResult) {
-        ocrSource = "groq-vision";
-        if (!detectedAvaliacaoId && visionResult.avaliacaoId) detectedAvaliacaoId = visionResult.avaliacaoId;
-        if (!detectedAlunoId && visionResult.alunoId) detectedAlunoId = visionResult.alunoId;
-        detectedVersao = visionResult.versao;
-        answerMap = visionResult.respostasMap;
+      // ── Tentativa 1: OMR por pixel (sem IA) ──────────────────────────────
+      // Usa as marcas de registro nos cantos para detectar bolhas marcadas.
+      // Funciona offline, sem custo de API. Requer folha gerada com marcas.
+      let omrMap = null;
+      try {
+        const hintForOmr = questionHint || 99;
+        omrMap = await detectAnswersOMR(buffer, hintForOmr);
+        if (Object.keys(omrMap).length > 0) {
+          console.log(`[omr] Detectadas ${Object.keys(omrMap).length} respostas por pixel.`);
+        } else {
+          omrMap = null;
+        }
+      } catch (omrErr) {
+        console.log("[omr] OMR falhou, usando IA como fallback:", omrErr.message);
+      }
+
+      if (omrMap) {
+        ocrSource = "omr";
+        answerMap = omrMap;
+        // OMR não lê QR/texto — IDs ainda precisam vir do formulário ou da IA
+        // Tentamos extrair IDs via IA (apenas metadados, sem releitura das bolhas)
+        if (!detectedAvaliacaoId || !detectedAlunoId) {
+          const metaResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_FALLBACK);
+          if (metaResult) {
+            if (!detectedAvaliacaoId && metaResult.avaliacaoId) detectedAvaliacaoId = metaResult.avaliacaoId;
+            if (!detectedAlunoId && metaResult.alunoId) detectedAlunoId = metaResult.alunoId;
+            detectedVersao = metaResult.versao;
+          }
+        }
       } else {
-        const tesseractText = await runTesseract(buffer);
-        ocrSource = "tesseract";
-        answerMap = parseAnswersFromText(tesseractText, 99);
+        // ── Tentativa 2: Groq Vision (IA) ────────────────────────────────────
+        let visionResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_MODEL);
+        if (!visionResult) {
+          console.log("[vision] Tentando modelo fallback...");
+          visionResult = await runVisionFull(dataUrl, questionHint, GROQ_VISION_FALLBACK);
+        }
+
+        if (visionResult) {
+          ocrSource = "groq-vision";
+          if (!detectedAvaliacaoId && visionResult.avaliacaoId) detectedAvaliacaoId = visionResult.avaliacaoId;
+          if (!detectedAlunoId && visionResult.alunoId) detectedAlunoId = visionResult.alunoId;
+          detectedVersao = visionResult.versao;
+          answerMap = visionResult.respostasMap;
+        } else {
+          // ── Tentativa 3: Tesseract (texto puro) ──────────────────────────
+          const tesseractText = await runTesseract(buffer);
+          ocrSource = "tesseract";
+          answerMap = parseAnswersFromText(tesseractText, 99);
+        }
       }
     } else if (recognizedText) {
       answerMap = parseAnswersFromText(recognizedText, 99);
@@ -323,8 +459,24 @@ export const correctionService = {
       );
     }
 
-    // --- Passo 6: Montar correção (e salvar apenas se não for preview) ---
-    const correctionPayload = buildCorrection({ avaliacao, aluno, questions, answerMap });
+    // --- Passo 6: Aplicar embaralhamento da versão detectada (se habilitado) ---
+    let orderedQuestions = questions;
+    const versaoLabel = detectedVersao || null;
+    if (
+      versaoLabel &&
+      (avaliacao.embaralhar_questoes || avaliacao.embaralhar_alternativas)
+    ) {
+      const versionSeed = hashSeed(`${avaliacao.id}:${versaoLabel}`);
+      orderedQuestions = buildVersionQuestions({
+        questions,
+        versionSeed,
+        shuffleQuestions: Boolean(avaliacao.embaralhar_questoes),
+        shuffleAlternatives: Boolean(avaliacao.embaralhar_alternativas),
+      });
+    }
+
+    // --- Passo 7: Montar correção (e salvar apenas se não for preview) ---
+    const correctionPayload = buildCorrection({ avaliacao, aluno, questions: orderedQuestions, answerMap });
 
     // Modo preview: retorna as respostas detectadas sem salvar para revisão do professor
     if (preview) {
@@ -339,9 +491,9 @@ export const correctionService = {
           versao: detectedVersao,
         },
         respostas_map: answerMap,
-        // Respostas no formato {questao_id: letra} para preencher o formulário
+        // Respostas no formato {questao_id: letra} — usa a ordem embaralhada da versão
         respostas_por_questao: Object.fromEntries(
-          questions.map((q, idx) => [q.id, answerMap[idx + 1] || ""])
+          orderedQuestions.map((q, idx) => [q.id, answerMap[idx + 1] || ""])
         ),
       };
     }

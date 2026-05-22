@@ -46,6 +46,15 @@ export default function Disciplinas() {
       return;
     }
 
+    if (/\d/.test(form.nome)) {
+      toast({
+        title: "Nome inválido",
+        description: "O nome da disciplina não pode conter números.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const data = { ...form, carga_horaria: form.carga_horaria ? Number(form.carga_horaria) : undefined };
     editing ? update.mutate({ id: editing.id, d: data }) : create.mutate(data);
   };
@@ -122,7 +131,7 @@ export default function Disciplinas() {
           <DialogHeader><DialogTitle>{editing ? "Editar Disciplina" : "Nova Disciplina"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Matemática" /></div>
+              <div className="space-y-2"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value.replace(/[0-9]/g, "") })} placeholder="Ex: Matemática" /></div>
               <div className="space-y-2"><Label>Código</Label><Input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })} placeholder="Ex: MAT101" /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

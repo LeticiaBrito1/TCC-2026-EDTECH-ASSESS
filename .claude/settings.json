@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(pm2 status)",
+      "Bash(pm2 list)",
+      "Bash(pm2 logs *)",
+      "Bash(docker compose *)",
+      "Bash(npx vite --version)"
+    ]
+  }
+}
