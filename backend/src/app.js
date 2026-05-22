@@ -42,11 +42,9 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) {
-        // Sem origin: aceito em dev (curl, Postman); bloqueado em produção
-        if (env.nodeEnv === "production") {
-          callback(new Error("Origem não permitida pelo CORS."));
-          return;
-        }
+        // Sem Origin header = requisição same-origin ou server-to-server.
+        // Browsers só enviam Origin em requisições cross-origin, então
+        // ausência de Origin nunca é uma violação de CORS.
         callback(null, true);
         return;
       }
