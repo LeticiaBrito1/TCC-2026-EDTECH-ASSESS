@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "com.edtech.assess",
+      "usesCleartextTraffic": true,
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",
@@ -27,7 +28,10 @@
       "bundler": "metro"
     },
     "extra": {
-      "eas": {}
-    }
+      "eas": {
+        "projectId": "96800bea-53fa-4657-b715-f0dac071f59e"
+      }
+    },
+    "owner": "kayckrossi12"
   }
 }
