@@ -103,8 +103,11 @@ export default function DashboardScreen({ token, user }) {
 
         {/* Últimas avaliações */}
         {data.avaliacoes.length > 0 && (
-          <View style={S.card}>
-            <Text style={S.sectionTitle}>Últimas Avaliações</Text>
+          <Pressable style={S.card} onPress={() => navigation.navigate("Avaliacoes")}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <Text style={S.sectionTitle}>Últimas Avaliações</Text>
+              <Ionicons name="chevron-forward" size={18} color={C.muted} />
+            </View>
             {data.avaliacoes.slice(0, 3).map((av, idx) => (
               <View key={av.id} style={{
                 paddingVertical: 10,
@@ -115,7 +118,7 @@ export default function DashboardScreen({ token, user }) {
                 <Text style={S.listItemSub}>{av.questoes_ids?.length || 0} questões · {av.total_pontos || 0} pts</Text>
               </View>
             ))}
-          </View>
+          </Pressable>
         )}
       </ScrollView>
     </SafeAreaView>
