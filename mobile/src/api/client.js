@@ -1,7 +1,7 @@
 const normalizeBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
 
 export const API_BASE_URL = normalizeBaseUrl(
-  process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8787"
+  process.env.EXPO_PUBLIC_API_BASE_URL || "http://54.227.184.231"
 );
 
 const parseResponseError = async (response) => {
