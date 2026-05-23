@@ -61,3 +61,12 @@ jobs:
             sudo chown -R www-data:www-data /var/www/edtech/dist
             sudo chmod -R 755 /var/www/edtech/dist
           ENDSSH
+
+      - name: Update Nginx config
+        run: |
+          scp -i ~/.ssh/ec2.pem -o StrictHostKeyChecking=no \
+            deploy/nginx.conf ubuntu@${{ secrets.EC2_HOST }}:/tmp/edtech-nginx.conf
+          ssh -i ~/.ssh/ec2.pem ubuntu@${{ secrets.EC2_HOST }} bash << 'ENDSSH'
+            sudo cp /tmp/edtech-nginx.conf /etc/nginx/sites-available/edtech
+            sudo nginx -t && sudo systemctl reload nginx
+          ENDSSH
