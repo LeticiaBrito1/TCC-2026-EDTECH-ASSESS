@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { containsAdultContent, containsProfanity } from "./profanityFilter";
 
 const readAsArrayBuffer = (file) =>
   new Promise((resolve, reject) => {
@@ -18,15 +18,18 @@ const readAsText = (file) =>
   });
 
 async function extractPdf(file) {
-  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
-  GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url
+  ).href;
+
   const buffer = await readAsArrayBuffer(file);
-  const pdf = await getDocument({ data: buffer, useSystemFonts: true }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: buffer, useSystemFonts: true }).promise;
   const pageTexts = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    // Agrupa itens de texto pela posição Y (linha), preservando quebras de linha reais
     const lineMap = {};
     for (const item of content.items) {
       if (!item.str?.trim()) continue;
@@ -77,16 +80,25 @@ async function extractXlsx(file) {
 }
 
 export const ACCEPTED_FILE_TYPES =
-  ".txt,.md,.csv,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx";
+  ".txt,.md,.csv,.pdf,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx";
 
 export const ACCEPTED_FILE_LABEL = "PDF, Word, PowerPoint, Excel, TXT, MD, CSV";
 
 export async function extractTextFromFile(file) {
   const name = file.name.toLowerCase();
-  if (/\.(txt|md|csv)$/i.test(name)) return readAsText(file);
-  if (/\.pdf$/i.test(name)) return extractPdf(file);
-  if (/\.docx?$/i.test(name)) return extractDocx(file);
-  if (/\.pptx?$/i.test(name)) return extractPptx(file);
-  if (/\.xlsx?$/i.test(name)) return extractXlsx(file);
-  return readAsText(file);
+  let text = "";
+
+  if (/\.(txt|md|csv)$/i.test(name)) text = await readAsText(file);
+  else if (/\.pdf$/i.test(name)) text = await extractPdf(file);
+  else if (/\.docx?$/i.test(name)) text = await extractDocx(file);
+  else if (/\.pptx?$/i.test(name)) text = await extractPptx(file);
+  else if (/\.xlsx?$/i.test(name)) text = await extractXlsx(file);
+  else text = await readAsText(file);
+
+  // Moderação de conteúdo
+  if (containsAdultContent(text) || containsProfanity(text)) {
+    throw new Error("O arquivo contém conteúdo inapropriado e não pode ser utilizado.");
+  }
+
+  return text;
 }

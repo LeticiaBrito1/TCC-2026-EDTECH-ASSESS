@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
+import { checkContent } from "@/lib/profanityFilter";
 import { Users, Plus, Pencil, Trash2, Search, GraduationCap, BookOpen, ClipboardCheck } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/AlertDialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +32,7 @@ export default function Turmas() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ nome: "", ano_letivo: "2025", periodo: "matutino", nivel: "medio", instituicao: "", ativa: true });
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data: turmas = [] } = useQuery({ queryKey: ["turmas"], queryFn: () => appClient.entities.Turma.list() });
   const { data: alunos = [] } = useQuery({ queryKey: ["alunos"], queryFn: () => appClient.entities.Aluno.list() });
@@ -55,6 +58,12 @@ export default function Turmas() {
 
   const handleSubmit = () => {
     if (!form.nome || !form.ano_letivo) return;
+    const textoParaVerificar = [form.nome, form.instituicao].filter(Boolean).join(" ");
+    const check = checkContent(textoParaVerificar);
+    if (!check.ok) {
+      toast({ title: "Conteúdo inadequado", description: "O texto informado contém palavras inapropriadas.", variant: "destructive" });
+      return;
+    }
     editing ? update.mutate({ id: editing.id, d: form }) : create.mutate(form);
   };
 

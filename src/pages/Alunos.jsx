@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { checkContent } from "@/lib/profanityFilter";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 
@@ -84,6 +85,11 @@ export default function Alunos() {
 
   const handleSubmit = () => {
     if (!form.nome || !form.turma_id) return;
+    const check = checkContent(form.nome);
+    if (!check.ok) {
+      toast({ title: "Conteúdo inadequado", description: "O nome informado contém palavras inapropriadas.", variant: "destructive" });
+      return;
+    }
     const isChangingTurma = editing ? editing.turma_id !== form.turma_id : true;
     if (!editing || isChangingTurma) {
       const alunosNaTurma = alunos.filter(a => a.turma_id === form.turma_id && a.id !== editing?.id);

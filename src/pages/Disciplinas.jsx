@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { checkContent } from "@/lib/profanityFilter";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 
@@ -52,6 +53,13 @@ export default function Disciplinas() {
         description: "O nome da disciplina não pode conter números.",
         variant: "destructive",
       });
+      return;
+    }
+
+    const textoParaVerificar = [form.nome, form.descricao].filter(Boolean).join(" ");
+    const check = checkContent(textoParaVerificar);
+    if (!check.ok) {
+      toast({ title: "Conteúdo inadequado", description: "O texto informado contém palavras inapropriadas.", variant: "destructive" });
       return;
     }
 

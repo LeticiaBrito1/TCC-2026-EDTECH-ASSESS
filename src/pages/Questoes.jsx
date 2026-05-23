@@ -16,6 +16,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
 import { extractTextFromFile, ACCEPTED_FILE_TYPES } from "@/lib/fileTextExtractor";
+import { checkContent } from "@/lib/profanityFilter";
 
 const DIFICULDADES = { facil: "Fácil", medio: "Médio", dificil: "Difícil" };
 const LETRAS = ["A", "B", "C", "D", "E"];
@@ -121,6 +122,12 @@ export default function Questoes() {
       toast({ title: "Gabarito inválido", description: "O gabarito deve corresponder a uma alternativa preenchida.", variant: "destructive" });
       return;
     }
+    const textoParaVerificar = [form.enunciado, ...altsPreenchidas.map(a => a.texto)].join(" ");
+    const check = checkContent(textoParaVerificar);
+    if (!check.ok) {
+      toast({ title: "Conteúdo inadequado", description: "O texto informado contém palavras inapropriadas.", variant: "destructive" });
+      return;
+    }
     const data = { ...form, alternativas: altsPreenchidas };
     editing ? update.mutate({ id: editing.id, d: data }) : create.mutate(data);
   };
@@ -146,8 +153,8 @@ export default function Questoes() {
           : `--- ${file.name} ---\n${truncated}`
       }));
       setMaterialNome(file.name);
-    } catch {
-      toast({ title: "Erro ao ler arquivo", description: "Não foi possível extrair o conteúdo do arquivo.", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Erro ao ler arquivo", description: err?.message || "Não foi possível extrair o conteúdo do arquivo.", variant: "destructive" });
     }
   };
 

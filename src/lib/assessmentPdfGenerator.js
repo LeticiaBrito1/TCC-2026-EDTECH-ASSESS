@@ -151,25 +151,21 @@ const drawCoverPage = async ({ doc, assessment, disciplinaNome, turmaNome, aluno
     ? [...new Set(versionQuestions.flatMap(q => (q.alternativas || []).map(a => a.letra)))].sort()
     : ["A", "B", "C", "D", "E"];
 
-  const cols = 3;
-  const colWidth = (pageWidth - margin * 2) / cols;
   const circleR = 3.5;
   const circleSpacing = 9;
+  const rowHeight = 10;
 
   versionQuestions.forEach((q, idx) => {
-    const col = idx % cols;
-    const row = Math.floor(idx / cols);
-    const x = margin + col * colWidth;
-    const qy = y + row * 12;
+    const qy = y + idx * rowHeight;
 
-    if (qy + 12 > doc.internal.pageSize.getHeight() - margin) return;
+    if (qy + rowHeight > doc.internal.pageSize.getHeight() - margin) return;
 
     doc.setFont("helvetica", "bold");
-    doc.text(`${idx + 1}.`, x, qy);
+    doc.text(`${idx + 1}.`, margin, qy);
 
     const alts = q.alternativas?.length > 0 ? q.alternativas.map(a => a.letra) : letters;
     alts.forEach((letra, li) => {
-      const cx = x + 8 + li * circleSpacing;
+      const cx = margin + 10 + li * circleSpacing;
       doc.setDrawColor(80);
       doc.circle(cx, qy - 2, circleR);
       doc.setFont("helvetica", "normal");
@@ -179,11 +175,14 @@ const drawCoverPage = async ({ doc, assessment, disciplinaNome, turmaNome, aluno
     });
   });
 
-  return y + Math.ceil(versionQuestions.length / cols) * 12 + 4;
+  return y + versionQuestions.length * rowHeight + 4;
 };
 
 const stripLeadingNumber = (text) =>
-  String(text || "").trim().replace(/^\d+\s*[.)\-]\s*/, "");
+  String(text || "")
+    .trim()
+    .replace(/^(n[uú]mero|quest[aã]o)\s+\d+\s*[-.):]?\s*/i, "")
+    .replace(/^\d+\s*[.)\-]\s*/, "");
 
 const drawQuestion = ({ doc, question, index, cursorY, peso }) => {
   const pageWidth = doc.internal.pageSize.getWidth();

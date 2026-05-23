@@ -28,6 +28,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { generateQuestionsForAssessment } from "@/lib/aiAssessmentGenerator";
 import { generateAssessmentPdf } from "@/lib/assessmentPdfGenerator";
 import { extractTextFromFile, ACCEPTED_FILE_TYPES } from "@/lib/fileTextExtractor";
+import { checkContent } from "@/lib/profanityFilter";
 
 const STATUS_MAP = {
   rascunho: { label: "Rascunho", class: "bg-muted text-muted-foreground" },
@@ -248,8 +249,8 @@ export default function Avaliacoes() {
           : `--- ${file.name} ---\n${truncated}`
       }));
       setMaterialNome(file.name);
-    } catch {
-      toast({ title: "Erro ao ler arquivo", description: "Não foi possível extrair o conteúdo do arquivo.", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Erro ao ler arquivo", description: err?.message || "Não foi possível extrair o conteúdo do arquivo.", variant: "destructive" });
     }
   };
 
@@ -369,6 +370,12 @@ export default function Avaliacoes() {
 
   const handleSubmit = () => {
     if (!form.titulo) return;
+    const textoParaVerificar = [form.titulo, form.instrucoes].filter(Boolean).join(" ");
+    const check = checkContent(textoParaVerificar);
+    if (!check.ok) {
+      toast({ title: "Conteúdo inadequado", description: "O texto informado contém palavras inapropriadas.", variant: "destructive" });
+      return;
+    }
     const pontos = Math.min(100, Math.max(0, Math.round(Number(form.total_pontos) * 100) / 100));
     editing ? update.mutate({ id: editing.id, d: { ...form, total_pontos: pontos } }) : create.mutate({ ...form, total_pontos: pontos });
   };
