@@ -19,10 +19,7 @@ const readAsText = (file) =>
 
 async function extractPdf(file) {
   const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url
-  ).href;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
   const buffer = await readAsArrayBuffer(file);
   const pdf = await pdfjsLib.getDocument({ data: buffer, useSystemFonts: true }).promise;
