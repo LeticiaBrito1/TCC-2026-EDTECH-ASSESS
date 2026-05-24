@@ -11,6 +11,7 @@ import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Eye, EyeOff, Mail, CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck, KeyRound } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -361,6 +362,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -450,10 +452,51 @@ const RegisterScreen = ({ onGoToLogin }) => {
           />
           <label htmlFor="terms" className="text-xs text-slate-500 cursor-pointer leading-relaxed">
             Li e aceito os{" "}
-            <span className="font-semibold text-teal-700">Termos de Uso</span> e a{" "}
-            <span className="font-semibold text-teal-700">Política de Privacidade</span> da plataforma EdTech Assess.
+            <button type="button" onClick={() => setShowTerms(true)} className="font-semibold text-teal-700 hover:underline">
+              Termos de Uso
+            </button>{" "}e a{" "}
+            <button type="button" onClick={() => setShowTerms(true)} className="font-semibold text-teal-700 hover:underline">
+              Política de Privacidade
+            </button>{" "}da plataforma EdTech Assess.
           </label>
         </div>
+
+        <Dialog open={showTerms} onOpenChange={setShowTerms}>
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Termos de Uso e Política de Privacidade</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">1. Sobre a Plataforma</h3>
+                <p>O EdTech Assess é uma plataforma educacional para criação e correção de avaliações. O uso é destinado exclusivamente a fins educacionais por professores e instituições de ensino.</p>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">2. Dados Coletados</h3>
+                <p>Coletamos nome, e-mail e dados de uso da plataforma. Esses dados são utilizados exclusivamente para o funcionamento do sistema e não são compartilhados com terceiros.</p>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">3. Uso Responsável</h3>
+                <p>O usuário compromete-se a utilizar a plataforma de forma ética, respeitando a privacidade dos alunos e não compartilhando credenciais de acesso.</p>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">4. Conteúdo</h3>
+                <p>É proibido inserir conteúdo impróprio, ofensivo ou ilegal. O sistema possui filtros automáticos de moderação de conteúdo.</p>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">5. Privacidade dos Alunos</h3>
+                <p>Os dados dos alunos cadastrados são de responsabilidade do professor/instituição. A plataforma armazena apenas as informações necessárias para o funcionamento das avaliações.</p>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">6. Alterações</h3>
+                <p>Estes termos podem ser atualizados a qualquer momento. O uso continuado da plataforma implica na aceitação das novas condições.</p>
+              </div>
+            </div>
+            <Button className="w-full mt-2" onClick={() => { setTermsAccepted(true); setShowTerms(false); }}>
+              Li e aceito os termos
+            </Button>
+          </DialogContent>
+        </Dialog>
 
         <Button type="submit" className="h-12 w-full rounded-2xl text-sm font-bold"
           disabled={isSubmittingRegister || !termsAccepted}>
