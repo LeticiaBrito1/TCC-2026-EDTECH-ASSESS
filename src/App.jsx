@@ -363,6 +363,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
   const [localError, setLocalError] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [termsTab, setTermsTab] = useState("terms");
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -452,10 +453,10 @@ const RegisterScreen = ({ onGoToLogin }) => {
           />
           <label htmlFor="terms" className="text-xs text-slate-500 cursor-pointer leading-relaxed">
             Li e aceito os{" "}
-            <button type="button" onClick={() => setShowTerms(true)} className="font-semibold text-teal-700 hover:underline">
+            <button type="button" onClick={() => { setTermsTab("terms"); setShowTerms(true); }} className="font-semibold text-teal-700 hover:underline">
               Termos de Uso
             </button>{" "}e a{" "}
-            <button type="button" onClick={() => setShowTerms(true)} className="font-semibold text-teal-700 hover:underline">
+            <button type="button" onClick={() => { setTermsTab("privacy"); setShowTerms(true); }} className="font-semibold text-teal-700 hover:underline">
               Política de Privacidade
             </button>{" "}da plataforma EdTech Assess.
           </label>
@@ -464,36 +465,77 @@ const RegisterScreen = ({ onGoToLogin }) => {
         <Dialog open={showTerms} onOpenChange={setShowTerms}>
           <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Termos de Uso e Política de Privacidade</DialogTitle>
+              <DialogTitle>{termsTab === "terms" ? "Termos de Uso" : "Política de Privacidade"}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
-              <div>
-                <h3 className="font-semibold text-slate-800 mb-1">1. Sobre a Plataforma</h3>
-                <p>O EdTech Assess é uma plataforma educacional para criação e correção de avaliações. O uso é destinado exclusivamente a fins educacionais por professores e instituições de ensino.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800 mb-1">2. Dados Coletados</h3>
-                <p>Coletamos nome, e-mail e dados de uso da plataforma. Esses dados são utilizados exclusivamente para o funcionamento do sistema e não são compartilhados com terceiros.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800 mb-1">3. Uso Responsável</h3>
-                <p>O usuário compromete-se a utilizar a plataforma de forma ética, respeitando a privacidade dos alunos e não compartilhando credenciais de acesso.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800 mb-1">4. Conteúdo</h3>
-                <p>É proibido inserir conteúdo impróprio, ofensivo ou ilegal. O sistema possui filtros automáticos de moderação de conteúdo.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800 mb-1">5. Privacidade dos Alunos</h3>
-                <p>Os dados dos alunos cadastrados são de responsabilidade do professor/instituição. A plataforma armazena apenas as informações necessárias para o funcionamento das avaliações.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800 mb-1">6. Alterações</h3>
-                <p>Estes termos podem ser atualizados a qualquer momento. O uso continuado da plataforma implica na aceitação das novas condições.</p>
-              </div>
+            <div className="flex gap-1 mb-4 bg-slate-100 rounded-xl p-1">
+              <button type="button" onClick={() => setTermsTab("terms")}
+                className={`flex-1 text-xs font-semibold py-1.5 rounded-lg transition-colors ${termsTab === "terms" ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                Termos de Uso
+              </button>
+              <button type="button" onClick={() => setTermsTab("privacy")}
+                className={`flex-1 text-xs font-semibold py-1.5 rounded-lg transition-colors ${termsTab === "privacy" ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                Política de Privacidade
+              </button>
             </div>
+
+            {termsTab === "terms" ? (
+              <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">1. Sobre a Plataforma</h3>
+                  <p>O EdTech Assess é uma plataforma educacional para criação e correção de avaliações, destinada exclusivamente a professores e instituições de ensino.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">2. Uso Permitido</h3>
+                  <p>A plataforma deve ser utilizada somente para fins educacionais legítimos. É proibido o uso para fins comerciais não autorizados, atividades ilegais ou que violem direitos de terceiros.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">3. Responsabilidades do Usuário</h3>
+                  <p>O usuário é responsável por manter suas credenciais em sigilo, pela veracidade dos dados cadastrados e pelo conteúdo inserido na plataforma.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">4. Conteúdo Proibido</h3>
+                  <p>É proibido inserir conteúdo impróprio, ofensivo, discriminatório ou ilegal. O sistema possui filtros automáticos de moderação de conteúdo.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">5. Disponibilidade</h3>
+                  <p>A plataforma é oferecida sem garantia de disponibilidade contínua. Podem ocorrer interrupções para manutenção ou melhorias.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">6. Alterações nos Termos</h3>
+                  <p>Estes termos podem ser atualizados a qualquer momento. O uso continuado da plataforma implica na aceitação das novas condições.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">1. Dados Coletados</h3>
+                  <p>Coletamos nome completo, endereço de e-mail e dados de uso da plataforma (avaliações criadas, resultados registrados). Não coletamos dados sensíveis além dos estritamente necessários.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">2. Finalidade do Tratamento</h3>
+                  <p>Os dados são utilizados exclusivamente para o funcionamento da plataforma: autenticação, geração de relatórios e comunicações sobre a conta.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">3. Compartilhamento de Dados</h3>
+                  <p>Seus dados não são vendidos nem compartilhados com terceiros para fins comerciais. Podemos compartilhá-los apenas quando exigido por lei.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">4. Dados dos Alunos</h3>
+                  <p>Os dados dos alunos cadastrados são de responsabilidade do professor/instituição. Recomendamos cadastrar apenas informações necessárias para a identificação nas avaliações.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">5. Segurança</h3>
+                  <p>Adotamos medidas técnicas para proteger os dados armazenados, incluindo senhas criptografadas e comunicação segura com o servidor.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-1">6. Seus Direitos (LGPD)</h3>
+                  <p>Você pode solicitar a exclusão da sua conta e de todos os dados associados a qualquer momento, em conformidade com a Lei Geral de Proteção de Dados (LGPD).</p>
+                </div>
+              </div>
+            )}
+
             <Button className="w-full mt-2" onClick={() => { setTermsAccepted(true); setShowTerms(false); }}>
-              Li e aceito os termos
+              Li e aceito
             </Button>
           </DialogContent>
         </Dialog>
