@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { appClient } from "@/api/appClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, CheckCircle2, XCircle, Loader2, QrCode, ImageUp, ClipboardPaste, AlertTriangle, Pencil } from "lucide-react";
+import { ScanLine, CheckCircle2, XCircle, Loader2, ImageUp, AlertTriangle, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import PageHeader from "@/components/shared/PageHeader";
-import QrCodeScanner from "@/components/shared/QrCodeScanner";
 
 const stripLeadingNumber = (text) =>
   String(text || "").trim().replace(/^\d+\s*[.)\-]\s*/, "");
@@ -85,8 +83,6 @@ export default function Correcao() {
   const [ocrDetected, setOcrDetected] = useState(null);
   const [ocrPreview, setOcrPreview] = useState(false);
   const [editingResult, setEditingResult] = useState(null);
-  const [qrFeedback, setQrFeedback] = useState(null);
-  const [qrPasteValue, setQrPasteValue] = useState("");
   const [ocrFile, setOcrFile] = useState(null);
   const [ocrError, setOcrError] = useState(null);
   const [pasteHighlight, setPasteHighlight] = useState(false);
@@ -363,50 +359,6 @@ export default function Correcao() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-primary" />
-                Leitura de QR Code (mobile)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Escaneie o QR da prova para preencher avaliação e aluno automaticamente.
-              </p>
-              <QrCodeScanner onDecoded={handleQrDecoded} />
-              <div className="space-y-1.5 pt-1">
-                <Label className="text-xs flex items-center gap-1.5 text-muted-foreground">
-                  <ClipboardPaste className="w-3.5 h-3.5" />
-                  Ou cole o conteúdo do QR Code
-                </Label>
-                <div className="flex gap-2">
-                  <Textarea
-                    rows={2}
-                    className="text-xs font-mono resize-none"
-                    placeholder='{"avaliacao_id":"...","aluno_id":"..."}'
-                    value={qrPasteValue}
-                    onChange={e => setQrPasteValue(e.target.value)}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 self-end"
-                    onClick={() => { handleQrDecoded(qrPasteValue); setQrPasteValue(""); }}
-                    disabled={!qrPasteValue.trim()}
-                  >
-                    Aplicar
-                  </Button>
-                </div>
-              </div>
-              {qrFeedback && (
-                <p className={`text-sm ${qrFeedback.type === "success" ? "text-success" : "text-destructive"}`}>
-                  {qrFeedback.message}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -476,7 +428,7 @@ export default function Correcao() {
                   {(ocrError.includes("avalia") || ocrError.includes("aluno")) && (
                     <p className="text-xs text-muted-foreground pl-6">
                       Selecione a <strong>avaliação</strong> e o <strong>aluno</strong> nos campos acima
-                      (ou escaneie o QR Code da prova) e clique em "Corrigir automaticamente" novamente.
+                      e clique em "Corrigir automaticamente" novamente.
                       Assim a IA foca apenas em ler as marcações do cartão.
                     </p>
                   )}

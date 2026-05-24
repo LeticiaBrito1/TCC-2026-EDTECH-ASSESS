@@ -47,15 +47,6 @@ export default function Disciplinas() {
       return;
     }
 
-    if (/\d/.test(form.nome)) {
-      toast({
-        title: "Nome inválido",
-        description: "O nome da disciplina não pode conter números.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const textoParaVerificar = [form.nome, form.descricao].filter(Boolean).join(" ");
     const check = checkContent(textoParaVerificar);
     if (!check.ok) {

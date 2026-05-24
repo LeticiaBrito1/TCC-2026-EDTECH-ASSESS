@@ -110,7 +110,7 @@ export default function Dashboard() {
           <p className="text-3xl font-bold text-foreground">{resultados.length}</p>
           <p className="text-sm text-muted-foreground mt-1">resultados registrados</p>
         </Card>
-        <Card className="p-6">
+        <Card className="p-6 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/Disciplinas")}>
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 rounded-xl bg-primary/10">
               <BookOpen className="w-5 h-5 text-primary" />
