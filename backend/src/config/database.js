@@ -160,6 +160,72 @@ const seedDefaultUsers = async (query) => {
   return { adminId, professorId };
 };
 
+const insertEntity = async (query, { entityType, data, ownerId }) => {
+  const id = randomUUID();
+  await query(
+    `INSERT INTO app_entities (id, entity_type, owner_id, data)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (id) DO NOTHING`,
+    [id, entityType, ownerId, JSON.stringify(data)]
+  );
+  return id;
+};
+
+const seedTestEntities = async (query, professorId) => {
+  // Verifica se já existem entidades (evita duplicar em reseeds)
+  const { rows } = await query(
+    `SELECT COUNT(*) AS cnt FROM app_entities WHERE entity_type = 'turmas' AND owner_id = $1`,
+    [professorId]
+  );
+  if (Number(rows[0]?.cnt) > 0) return;
+
+  // Turma
+  const turmaId = await insertEntity(query, {
+    entityType: "turmas",
+    ownerId: professorId,
+    data: { nome: "Turma A — 9º Ano", nivel: "fundamental", ano: 2025 },
+  });
+
+  // Alunos
+  const nomes = ["Ana Oliveira", "Bruno Santos", "Carla Lima", "Diego Costa", "Elisa Rocha"];
+  for (let i = 0; i < nomes.length; i++) {
+    await insertEntity(query, {
+      entityType: "alunos",
+      ownerId: professorId,
+      data: { nome: nomes[i], matricula: `2025${String(i + 1).padStart(3, "0")}`, turma_id: turmaId, ativo: true },
+    });
+  }
+
+  // Questões
+  const questoesData = [
+    { enunciado: "Quanto é 2 + 2?", gabarito: "A", nivel_dificuldade: "facil", alternativas: [{ letra: "A", texto: "4" }, { letra: "B", texto: "3" }, { letra: "C", texto: "5" }, { letra: "D", texto: "6" }] },
+    { enunciado: "Qual é a capital do Brasil?", gabarito: "B", nivel_dificuldade: "facil", alternativas: [{ letra: "A", texto: "São Paulo" }, { letra: "B", texto: "Brasília" }, { letra: "C", texto: "Rio de Janeiro" }, { letra: "D", texto: "Salvador" }] },
+    { enunciado: "Quem escreveu Dom Casmurro?", gabarito: "C", nivel_dificuldade: "medio", alternativas: [{ letra: "A", texto: "José de Alencar" }, { letra: "B", texto: "Clarice Lispector" }, { letra: "C", texto: "Machado de Assis" }, { letra: "D", texto: "Drummond" }] },
+    { enunciado: "Qual o resultado de 8 × 7?", gabarito: "D", nivel_dificuldade: "facil", alternativas: [{ letra: "A", texto: "54" }, { letra: "B", texto: "48" }, { letra: "C", texto: "52" }, { letra: "D", texto: "56" }] },
+  ];
+  const questaoIds = [];
+  for (const q of questoesData) {
+    const qId = await insertEntity(query, { entityType: "questoes", ownerId: professorId, data: q });
+    questaoIds.push(qId);
+  }
+
+  // Avaliação
+  await insertEntity(query, {
+    entityType: "avaliacoes",
+    ownerId: professorId,
+    data: {
+      titulo: "Avaliação de Teste",
+      status: "publicada",
+      total_pontos: 10,
+      turma_id: turmaId,
+      questoes_ids: questaoIds,
+      questoes_pesos: Object.fromEntries(questaoIds.map((id) => [id, 2.5])),
+    },
+  });
+
+  console.log("[backend] Dados de teste inseridos no banco em memória (turma + 5 alunos + 4 questões + 1 avaliação).");
+};
+
 const createMemoryPool = () => {
   const memDb = newDb();
   const { Pool } = memDb.adapters.createPg();
@@ -202,7 +268,8 @@ export const initDatabase = async () => {
     const memoryPool = createMemoryPool();
     queryExecutor = (text, params) => memoryPool.query(text, params);
     await runMigrations(queryExecutor);
-    await seedDefaultUsers(queryExecutor);
+    const { professorId } = await seedDefaultUsers(queryExecutor);
+    await seedTestEntities(queryExecutor, professorId);
     databaseMode = "memory";
     console.warn(
       "[backend] PostgreSQL indisponível. Rodando em fallback de memória (NÃO PERSISTE DADOS APÓS REINÍCIO).",

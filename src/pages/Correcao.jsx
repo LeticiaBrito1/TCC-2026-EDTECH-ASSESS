@@ -150,8 +150,12 @@ export default function Correcao() {
   });
 
   const avaliacao = avaliacoes.find(a => a.id === selectedAvaliacao);
+  const alunosDaTurma = avaliacao?.turma_id
+    ? alunos.filter(a => a.turma_id === avaliacao.turma_id)
+    : alunos;
+  // Se a avaliação tem turma mas nenhum aluno está nela, exibe todos os alunos como fallback
   const alunosFiltrados = (avaliacao
-    ? (avaliacao.turma_id ? alunos.filter(a => a.turma_id === avaliacao.turma_id) : alunos)
+    ? (alunosDaTurma.length > 0 ? alunosDaTurma : alunos)
     : []
   ).slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR"));
   const questoesAvaliacao = avaliacao?.questoes_ids?.map(id => questoes.find(q => q.id === id)).filter(Boolean) || [];
