@@ -146,7 +146,6 @@ export default function AvaliacoesScreen({ token }) {
                 {getQuestoes(selected?.questoes_ids).map((q, idx) => (
                   <View key={q.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.border }}>
                     <Text style={S.body} numberOfLines={2}>{idx + 1}. {q.enunciado}</Text>
-                    <Text style={S.muted}>Gabarito: {q.gabarito}</Text>
                   </View>
                 ))}
               </View>
