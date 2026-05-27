@@ -202,10 +202,6 @@ export default function Alunos() {
     const rows = buildAlunosRows();
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     let y = 14;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("Lista de Alunos", 14, y);
-    y += 8;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     rows.forEach((row, i) => {
@@ -238,8 +234,8 @@ export default function Alunos() {
       <div className="flex flex-col gap-3 mb-6">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Buscar por nome ou matrícula..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Input placeholder="Buscar por nome ou matrícula..." aria-label="Buscar alunos por nome ou matrícula" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
           </div>
           <Select value={filterTurma} onValueChange={setFilterTurma}>
             <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Turma" /></SelectTrigger>
@@ -333,8 +329,8 @@ export default function Alunos() {
                     <TableCell><Badge variant={a.ativo !== false ? "default" : "secondary"} className="text-xs">{a.ativo !== false ? "Ativo" : "Inativo"}</Badge></TableCell>
                     <TableCell>
                       <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => openEdit(a, e)}><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => handleDelete(a, e)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Editar aluno ${a.nome}`} onClick={(e) => openEdit(a, e)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Excluir aluno ${a.nome}`} onClick={(e) => handleDelete(a, e)}><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
