@@ -194,4 +194,17 @@ export const authController = {
       throw error;
     }
   },
+
+  // ── DEV ONLY: login direto sem 2FA, para testes automatizados ───────────────
+  async devLogin(req, res) {
+    if (process.env.ALLOW_DIRECT_LOGIN !== "true") {
+      throw new HttpError(404, "Not found.");
+    }
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpError(400, "Payload inválido.", parsed.error.flatten());
+    }
+    const result = await authService.devLogin(parsed.data);
+    res.json(result);
+  },
 };

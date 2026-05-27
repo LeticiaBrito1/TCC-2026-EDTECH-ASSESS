@@ -221,4 +221,17 @@ export const authService = {
     await updateUserPassword(userId, newHash);
     await incrementTokenVersion(userId);
   },
+
+  // ── DEV ONLY: retorna JWT diretamente sem 2FA ────────────────────────────────
+  async devLogin({ email, password }) {
+    if (process.env.ALLOW_DIRECT_LOGIN !== "true") {
+      throw new HttpError(404, "Not found.");
+    }
+    const user = await findUserByEmail(email);
+    if (!user || !user.active) throw new HttpError(401, "Credenciais inválidas.");
+    const matches = await bcrypt.compare(password, user.password_hash);
+    if (!matches) throw new HttpError(401, "Credenciais inválidas.");
+    const token = signToken(user);
+    return { token, user: sanitizeUser(user) };
+  },
 };

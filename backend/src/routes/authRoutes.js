@@ -16,4 +16,11 @@ router.get("/auth/me", authenticate, asyncHandler(authController.me));
 router.patch("/auth/profile", authenticate, asyncHandler(authController.updateProfile));
 router.post("/auth/change-password", authenticate, asyncHandler(authController.changePassword));
 
+// ── Endpoint exclusivo para testes automatizados ──────────────────────────────
+// Só ativo quando ALLOW_DIRECT_LOGIN=true (nunca em produção).
+// Retorna um JWT diretamente sem passar pelo fluxo de 2FA.
+if (process.env.ALLOW_DIRECT_LOGIN === "true") {
+  router.post("/auth/dev-login", asyncHandler(authController.devLogin));
+}
+
 export { router as authRoutes };
