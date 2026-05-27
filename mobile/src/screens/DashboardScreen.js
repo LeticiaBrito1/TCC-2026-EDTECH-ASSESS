@@ -8,23 +8,21 @@ import { apiList } from "../api/client";
 
 export default function DashboardScreen({ token, user }) {
   const navigation = useNavigation();
-  const [data, setData] = useState({ turmas: [], alunos: [], resultados: [], avaliacoes: [] });
+  const [data, setData] = useState({ turmas: [], alunos: [], resultados: [] });
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [t, a, r, av] = await Promise.all([
+      const [t, a, r] = await Promise.all([
         apiList(token, "turmas"),
         apiList(token, "alunos"),
         apiList(token, "resultados"),
-        apiList(token, "avaliacoes"),
       ]);
       setData({
         turmas: Array.isArray(t) ? t : [],
         alunos: Array.isArray(a) ? a : [],
         resultados: Array.isArray(r) ? r : [],
-        avaliacoes: Array.isArray(av) ? av : [],
       });
     } catch { }
     finally { setLoading(false); }
@@ -101,25 +99,6 @@ export default function DashboardScreen({ token, user }) {
           </View>
         )}
 
-        {/* Últimas avaliações */}
-        {data.avaliacoes.length > 0 && (
-          <Pressable style={S.card} onPress={() => navigation.navigate("Avaliacoes")}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <Text style={S.sectionTitle}>Últimas Avaliações</Text>
-              <Ionicons name="chevron-forward" size={18} color={C.muted} />
-            </View>
-            {data.avaliacoes.slice(0, 3).map((av, idx) => (
-              <View key={av.id} style={{
-                paddingVertical: 10,
-                borderBottomWidth: idx < 2 ? 1 : 0,
-                borderBottomColor: C.border,
-              }}>
-                <Text style={S.listItemTitle}>{av.titulo}</Text>
-                <Text style={S.listItemSub}>{av.questoes_ids?.length || 0} questões · {av.total_pontos || 0} pts</Text>
-              </View>
-            ))}
-          </Pressable>
-        )}
       </ScrollView>
     </SafeAreaView>
   );

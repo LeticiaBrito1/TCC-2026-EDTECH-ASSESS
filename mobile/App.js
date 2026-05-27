@@ -12,7 +12,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { API_BASE_URL, apiLogin, apiVerifyLoginCode, apiMe, apiRegister, apiForgotPassword } from "./src/api/client";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import AlunosScreen from "./src/screens/AlunosScreen";
-import AvaliacoesScreen from "./src/screens/AvaliacoesScreen";
 import CorrecaoScreen from "./src/screens/CorrecaoScreen";
 import TurmasScreen from "./src/screens/TurmasScreen";
 import DisciplinasScreen from "./src/screens/DisciplinasScreen";
@@ -118,14 +117,12 @@ function MainTabs({ token, user, onLogout, onUserUpdate }) {
         tabBarInactiveTintColor: C.muted,
         tabBarStyle: { backgroundColor: C.white, borderTopColor: C.border, paddingBottom: 4 },
         tabBarLabel:
-          route.name === "Avaliacoes" ? "Avaliações" :
-          route.name === "Correcao"   ? "Correção"   :
-          route.name === "Mais"       ? "Menu"        :
+          route.name === "Correcao" ? "Correção" :
+          route.name === "Mais"     ? "Menu"      :
           route.name,
         tabBarIcon: ({ focused, color }) => {
           const icons = {
             Dashboard: focused ? "home" : "home-outline",
-            Avaliacoes: focused ? "document-text" : "document-text-outline",
             Correcao: focused ? "camera" : "camera-outline",
             Alunos: focused ? "people" : "people-outline",
             Mais: focused ? "grid" : "grid-outline",
@@ -136,9 +133,6 @@ function MainTabs({ token, user, onLogout, onUserUpdate }) {
     >
       <Tab.Screen name="Dashboard">
         {() => <DashboardScreen token={token} user={user} />}
-      </Tab.Screen>
-      <Tab.Screen name="Avaliacoes">
-        {() => <AvaliacoesScreen token={token} />}
       </Tab.Screen>
       <Tab.Screen name="Correcao">
         {() => <CorrecaoScreen token={token} />}
