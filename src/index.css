@@ -92,3 +92,47 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Modos de acessibilidade ──────────────────────────────── */
+
+/* Alto contraste */
+.a11y-high-contrast {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --border: 0 0% 0%;
+  --input: 0 0% 0%;
+  --muted: 0 0% 90%;
+  --muted-foreground: 0 0% 15%;
+  --primary: 218 100% 20%;
+  --primary-foreground: 0 0% 100%;
+  --destructive: 0 100% 40%;
+}
+
+.a11y-high-contrast .text-muted-foreground {
+  color: hsl(0 0% 20%) !important;
+}
+
+/* Texto grande */
+.a11y-large-text {
+  font-size: 112.5%;
+}
+
+/* Reduzir animações */
+.a11y-reduce-motion *,
+.a11y-reduce-motion *::before,
+.a11y-reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Realçar foco */
+.a11y-focus-visible *:focus-visible {
+  outline: 3px solid hsl(var(--primary)) !important;
+  outline-offset: 3px !important;
+  border-radius: 4px;
+  box-shadow: 0 0 0 5px hsl(var(--primary) / 0.2) !important;
+}

@@ -6,6 +6,7 @@ import { BrowserRouter as Router, Route, Routes, useSearchParams, useNavigate } 
 import { Suspense, useState, useEffect } from "react";
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { AccessibilityProvider } from '@/lib/AccessibilityContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/button";
@@ -807,14 +808,16 @@ const AppRouter = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <AppRouter />
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    <AccessibilityProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <AppRouter />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </AccessibilityProvider>
   );
 }
 

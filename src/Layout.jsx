@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import AccessibilityWidget from "@/components/shared/AccessibilityWidget";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -297,6 +298,8 @@ export default function Layout({ children, currentPageName }) {
           {children}
         </main>
       </div>
+
+      <AccessibilityWidget />
     </div>
   );
 }
