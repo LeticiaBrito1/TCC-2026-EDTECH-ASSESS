@@ -136,3 +136,22 @@
   border-radius: 4px;
   box-shadow: 0 0 0 5px hsl(var(--primary) / 0.2) !important;
 }
+
+/* Leitura em voz alta — cursor especial nos elementos clicáveis */
+.a11y-audio p:hover,
+.a11y-audio h1:hover,
+.a11y-audio h2:hover,
+.a11y-audio h3:hover,
+.a11y-audio h4:hover,
+.a11y-audio h5:hover,
+.a11y-audio h6:hover,
+.a11y-audio li:hover,
+.a11y-audio button:hover,
+.a11y-audio a:hover,
+.a11y-audio td:hover,
+.a11y-audio th:hover {
+  cursor: cell !important;
+  outline: 1px dashed hsl(var(--primary) / 0.5);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

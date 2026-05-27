@@ -7,6 +7,7 @@ const defaults = {
   largeText: false,
   reduceMotion: false,
   focusVisible: false,
+  audioReadAloud: false,
 };
 
 const AccessibilityContext = createContext(null);
