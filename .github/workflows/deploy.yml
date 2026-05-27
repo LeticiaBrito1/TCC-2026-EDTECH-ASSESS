@@ -56,8 +56,18 @@ jobs:
       - name: Swap frontend on server
         run: |
           ssh -i ~/.ssh/ec2.pem ubuntu@${{ secrets.EC2_HOST }} bash << 'ENDSSH'
+            # Preserva o APK antes de trocar o dist
+            APK_BACKUP=""
+            if [ -f /var/www/edtech/dist/edtech-app.apk ]; then
+              cp /var/www/edtech/dist/edtech-app.apk /tmp/edtech-app-backup.apk
+              APK_BACKUP="yes"
+            fi
             sudo rm -rf /var/www/edtech/dist
             sudo mv /tmp/edtech-dist-new /var/www/edtech/dist
+            # Restaura o APK após o deploy
+            if [ "$APK_BACKUP" = "yes" ]; then
+              sudo cp /tmp/edtech-app-backup.apk /var/www/edtech/dist/edtech-app.apk
+            fi
             sudo chown -R www-data:www-data /var/www/edtech/dist
             sudo chmod -R 755 /var/www/edtech/dist
           ENDSSH
