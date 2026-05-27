@@ -39,17 +39,17 @@ export default function Dashboard() {
       </div>
 
       {/* Stats clicáveis */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="cursor-pointer" onClick={() => navigate("/Turmas")}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" role="navigation" aria-label="Acesso rápido às seções">
+        <div className="cursor-pointer" role="button" tabIndex={0} aria-label={`Turmas: ${turmas.length} cadastradas`} onClick={() => navigate("/Turmas")} onKeyDown={e => (e.key === "Enter" || e.key === " ") && navigate("/Turmas")}>
           <StatCard title="Turmas" value={turmas.length} icon={Users} color="primary" />
         </div>
-        <div className="cursor-pointer" onClick={() => navigate("/Alunos")}>
+        <div className="cursor-pointer" role="button" tabIndex={0} aria-label={`Alunos: ${alunos.length} cadastrados`} onClick={() => navigate("/Alunos")} onKeyDown={e => (e.key === "Enter" || e.key === " ") && navigate("/Alunos")}>
           <StatCard title="Alunos" value={alunos.length} icon={GraduationCap} color="success" />
         </div>
-        <div className="cursor-pointer" onClick={() => navigate("/Questoes")}>
+        <div className="cursor-pointer" role="button" tabIndex={0} aria-label={`Questões: ${questoes.length} cadastradas`} onClick={() => navigate("/Questoes")} onKeyDown={e => (e.key === "Enter" || e.key === " ") && navigate("/Questoes")}>
           <StatCard title="Questões" value={questoes.length} icon={FileQuestion} color="warning" />
         </div>
-        <div className="cursor-pointer" onClick={() => navigate("/Avaliacoes")}>
+        <div className="cursor-pointer" role="button" tabIndex={0} aria-label={`Avaliações: ${avaliacoes.length} cadastradas`} onClick={() => navigate("/Avaliacoes")} onKeyDown={e => (e.key === "Enter" || e.key === " ") && navigate("/Avaliacoes")}>
           <StatCard title="Avaliações" value={avaliacoes.length} icon={ClipboardCheck} color="destructive" />
         </div>
       </div>
@@ -100,20 +100,20 @@ export default function Dashboard() {
 
       {/* Resumo rápido */}
       <div className="grid md:grid-cols-3 gap-4">
-        <Card className="p-6 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/Relatorios")}>
+        <Card className="p-6 cursor-pointer hover:shadow-lg transition-shadow" role="button" tabIndex={0} aria-label={`Ver relatórios: ${resultados.length} resultados registrados`} onClick={() => navigate("/Relatorios")} onKeyDown={e => (e.key === "Enter" || e.key === " ") && navigate("/Relatorios")}>
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 rounded-xl bg-primary/10">
-              <BarChart3 className="w-5 h-5 text-primary" />
+              <BarChart3 className="w-5 h-5 text-primary" aria-hidden="true" />
             </div>
             <h3 className="font-semibold text-foreground">Relatórios</h3>
           </div>
           <p className="text-3xl font-bold text-foreground">{resultados.length}</p>
           <p className="text-sm text-muted-foreground mt-1">resultados registrados</p>
         </Card>
-        <Card className="p-6 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/Disciplinas")}>
+        <Card className="p-6 cursor-pointer hover:shadow-lg transition-shadow" role="button" tabIndex={0} aria-label={`Ver disciplinas: ${disciplinas.length} cadastradas`} onClick={() => navigate("/Disciplinas")} onKeyDown={e => (e.key === "Enter" || e.key === " ") && navigate("/Disciplinas")}>
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 rounded-xl bg-primary/10">
-              <BookOpen className="w-5 h-5 text-primary" />
+              <BookOpen className="w-5 h-5 text-primary" aria-hidden="true" />
             </div>
             <h3 className="font-semibold text-foreground">Disciplinas</h3>
           </div>

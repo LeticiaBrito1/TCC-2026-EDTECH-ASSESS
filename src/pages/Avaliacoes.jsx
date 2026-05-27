@@ -594,14 +594,14 @@ export default function Avaliacoes() {
                       )}
                     </div>
                     <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openSyncDialog(a)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Compartilhar avaliação ${a.titulo}`} onClick={() => openSyncDialog(a)}>
                         <Share2 className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openPdfDialog(a)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Exportar avaliação ${a.titulo} em PDF`} onClick={() => openPdfDialog(a)}>
                         <Download className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => openDeleteDialog(a)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Editar avaliação ${a.titulo}`} onClick={() => openEdit(a)}><Pencil className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Excluir avaliação ${a.titulo}`} onClick={() => openDeleteDialog(a)}><Trash2 className="w-3.5 h-3.5" /></Button>
                     </div>
                   </div>
                 </CardContent>

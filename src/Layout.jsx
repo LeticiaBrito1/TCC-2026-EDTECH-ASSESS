@@ -163,11 +163,12 @@ export default function Layout({ children, currentPageName }) {
                   onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                 >
                   <span className="flex items-center gap-2 text-sm">
-                    <Bell className="w-4 h-4" />
+                    <Bell className="w-4 h-4" aria-hidden="true" />
                     Notificações
+                    {unreadNotifications > 0 && <span className="sr-only">({unreadNotifications} não lidas)</span>}
                   </span>
                   {unreadNotifications > 0 ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-destructive text-white">
+                    <span aria-hidden="true" className="text-xs px-2 py-0.5 rounded-full bg-destructive text-white">
                       {unreadNotifications > 9 ? "9+" : unreadNotifications}
                     </span>
                   ) : (
@@ -243,21 +244,21 @@ export default function Layout({ children, currentPageName }) {
         {/* Top bar mobile */}
         <header className="lg:hidden sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border px-4 py-3">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
-              <Menu className="w-5 h-5" />
+            <Button variant="ghost" size="icon" aria-label="Abrir menu de navegação" onClick={() => setSidebarOpen(true)}>
+              <Menu className="w-5 h-5" aria-hidden="true" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center" aria-hidden="true">
                 <ScanLine className="w-4 h-4 text-primary-foreground" />
               </div>
               <span className="font-bold text-foreground">EdTech Assess</span>
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="w-5 h-5" />
+                <Button variant="ghost" size="icon" className="relative" aria-label={unreadNotifications > 0 ? `Notificações: ${unreadNotifications} não lidas` : "Notificações"}>
+                  <Bell className="w-5 h-5" aria-hidden="true" />
                   {unreadNotifications > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center">
+                    <span aria-hidden="true" className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center">
                       {unreadNotifications > 9 ? "9+" : unreadNotifications}
                     </span>
                   )}

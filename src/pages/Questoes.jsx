@@ -245,8 +245,8 @@ export default function Questoes() {
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(q)}><Pencil className="w-3.5 h-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setDeleteTarget(q); setDeleteDialogOpen(true); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Editar questão" onClick={() => openEdit(q)}><Pencil className="w-3.5 h-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label="Excluir questão" onClick={() => { setDeleteTarget(q); setDeleteDialogOpen(true); }}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 </div>
               </CardContent>

@@ -94,10 +94,10 @@ export default function Disciplinas() {
                     {d.carga_horaria && <Badge variant="outline" className="text-xs">{d.carga_horaria}h</Badge>}
                   </div>
                   <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Editar disciplina ${d.nome}`} onClick={() => openEdit(d)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setDeleteTarget(d); setDeleteDialogOpen(true); }}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Excluir disciplina ${d.nome}`} onClick={() => { setDeleteTarget(d); setDeleteDialogOpen(true); }}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>

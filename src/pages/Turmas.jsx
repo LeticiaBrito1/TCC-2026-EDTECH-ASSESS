@@ -117,10 +117,10 @@ export default function Turmas() {
                       <Badge variant="outline" className="text-xs">{numAlunos} alunos</Badge>
                     </div>
                     <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => openEdit(t, e)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Editar turma ${t.nome}`} onClick={(e) => openEdit(t, e)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => handleDelete(t, e)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Excluir turma ${t.nome}`} onClick={(e) => handleDelete(t, e)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>

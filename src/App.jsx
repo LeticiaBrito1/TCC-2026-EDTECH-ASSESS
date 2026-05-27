@@ -128,7 +128,7 @@ const LoginScreen = ({ onGoToRegister, onGoToForgot }) => {
         </div>
 
         {authError?.type === "login_failed" && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          <div role="alert" aria-live="polite" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {authError.message}
           </div>
         )}
@@ -322,9 +322,10 @@ const ResetPasswordScreen = ({ onGoToLogin }) => {
                 autoComplete="new-password" placeholder="Mín. 8 caracteres, letras e números"
                 value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
               <button type="button" tabIndex={-1}
+                aria-label={showPw ? "Ocultar senha" : "Mostrar senha"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                 onClick={() => setShowPw(v => !v)}>
-                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPw ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -421,9 +422,10 @@ const RegisterScreen = ({ onGoToLogin }) => {
               autoComplete="new-password" placeholder="Mín. 8 caracteres, letras e números"
               value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <button type="button" tabIndex={-1}
+              aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
               onClick={() => setShowPassword(v => !v)}>
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -435,7 +437,7 @@ const RegisterScreen = ({ onGoToLogin }) => {
         </div>
 
         {errorMessage && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          <div role="alert" aria-live="polite" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {errorMessage}
           </div>
         )}
