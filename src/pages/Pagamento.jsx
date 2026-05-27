@@ -144,7 +144,11 @@ function PlanStep({ onSelect }) {
   return (
     <div className="max-w-md mx-auto">
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Selecionar ${plan.name} por ${plan.priceLabel} por mês`}
         onClick={() => onSelect(plan)}
+        onKeyDown={e => (e.key === "Enter" || e.key === " ") && onSelect(plan)}
         className="relative rounded-2xl border-2 border-primary p-8 cursor-pointer hover:shadow-xl transition-all duration-200 shadow-lg"
       >
         {plan.badge && (
@@ -211,7 +215,7 @@ function CardStep({ plan, onBack, onPay }) {
 
   return (
     <div className="space-y-6 max-w-lg mx-auto">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <button onClick={onBack} aria-label="Voltar para seleção de plano" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
@@ -232,57 +236,67 @@ function CardStep({ plan, onBack, onPay }) {
 
       <div className="space-y-4">
         <div className="space-y-1">
-          <Label>Número do cartão</Label>
+          <Label htmlFor="card-number">Número do cartão</Label>
           <div className="relative">
-            <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
+              id="card-number"
               className={`pl-9 font-mono tracking-widest ${errors.number ? "border-destructive" : ""}`}
               placeholder="0000 0000 0000 0000"
               value={card.number}
+              autoComplete="cc-number"
+              inputMode="numeric"
               onChange={e => setCard(c => ({ ...c, number: formatCardNumber(e.target.value) }))}
               maxLength={19}
             />
           </div>
-          {errors.number && <p className="text-xs text-destructive">{errors.number}</p>}
+          {errors.number && <p role="alert" className="text-xs text-destructive">{errors.number}</p>}
         </div>
 
         <div className="space-y-1">
-          <Label>Nome do titular</Label>
+          <Label htmlFor="card-name">Nome do titular</Label>
           <Input
+            id="card-name"
             className={errors.name ? "border-destructive" : ""}
             placeholder="Como está no cartão"
             value={card.name}
+            autoComplete="cc-name"
             onChange={e => setCard(c => ({ ...c, name: e.target.value.toUpperCase() }))}
           />
-          {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+          {errors.name && <p role="alert" className="text-xs text-destructive">{errors.name}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <Label>Validade</Label>
+            <Label htmlFor="card-expiry">Validade</Label>
             <Input
+              id="card-expiry"
               className={errors.expiry ? "border-destructive" : ""}
               placeholder="MM/AA"
               value={card.expiry}
               maxLength={5}
+              autoComplete="cc-exp"
               onChange={e => setCard(c => ({ ...c, expiry: formatExpiry(e.target.value) }))}
             />
-            {errors.expiry && <p className="text-xs text-destructive">{errors.expiry}</p>}
+            {errors.expiry && <p role="alert" className="text-xs text-destructive">{errors.expiry}</p>}
           </div>
           <div className="space-y-1">
-            <Label>CVV</Label>
+            <Label htmlFor="card-cvv">CVV</Label>
             <Input
+              id="card-cvv"
               ref={cvvRef}
               className={`font-mono ${errors.cvv ? "border-destructive" : ""}`}
               placeholder="•••"
               type="password"
               maxLength={4}
               value={card.cvv}
+              autoComplete="cc-csc"
+              aria-label="Código de segurança do cartão"
               onFocus={() => setFlipped(true)}
               onBlur={() => setFlipped(false)}
               onChange={e => setCard(c => ({ ...c, cvv: e.target.value.replace(/\D/g, "") }))}
             />
-            {errors.cvv && <p className="text-xs text-destructive">{errors.cvv}</p>}
+            {errors.cvv && <p role="alert" className="text-xs text-destructive">{errors.cvv}</p>}
           </div>
         </div>
       </div>
@@ -505,7 +519,7 @@ export default function Pagamento() {
       </div>
 
       {/* Stepper */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-1">
+      <nav aria-label="Etapas do pagamento" className="flex items-center gap-2 mb-8 overflow-x-auto pb-1">
         {["plan", "card", "success"].map((s, i) => {
           const labels = ["Plano", "Pagamento", "Confirmação"];
           const idx = ["plan", "card", "processing", "success", "manage"].indexOf(step);
@@ -514,7 +528,10 @@ export default function Pagamento() {
           const active = (step === s) || (step === "processing" && s === "card") || (step === "manage" && s === "success");
           return (
             <React.Fragment key={s}>
-              <div className={`flex items-center gap-2 shrink-0 ${active || done ? "text-primary" : "text-muted-foreground"}`}>
+              <div
+                aria-current={active ? "step" : undefined}
+                className={`flex items-center gap-2 shrink-0 ${active || done ? "text-primary" : "text-muted-foreground"}`}
+              >
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors
                   ${done || step === "manage" ? "bg-primary border-primary text-white"
                     : active ? "border-primary text-primary"
@@ -523,11 +540,11 @@ export default function Pagamento() {
                 </div>
                 <span className={`text-sm font-medium ${active ? "text-primary" : ""}`}>{labels[i]}</span>
               </div>
-              {i < 2 && <div className={`flex-1 h-px min-w-[24px] ${done || step === "manage" ? "bg-primary" : "bg-border"}`} />}
+              {i < 2 && <div aria-hidden="true" className={`flex-1 h-px min-w-[24px] ${done || step === "manage" ? "bg-primary" : "bg-border"}`} />}
             </React.Fragment>
           );
         })}
-      </div>
+      </nav>
 
       {step === "plan" && <PlanStep onSelect={handleSelectPlan} />}
       {step === "card" && <CardStep plan={selectedPlan} onBack={() => setStep("plan")} onPay={handlePay} />}

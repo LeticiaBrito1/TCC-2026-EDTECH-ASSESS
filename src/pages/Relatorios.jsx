@@ -291,9 +291,9 @@ export default function Relatorios() {
         <CardContent className="p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Turma</Label>
+              <Label htmlFor="filtro-turma">Turma</Label>
               <Select value={filterTurma} onValueChange={v => { setFilterTurma(v); setFilterAluno("all"); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="filtro-turma" aria-label="Filtrar por turma"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as turmas</SelectItem>
                   {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
@@ -301,9 +301,9 @@ export default function Relatorios() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Avaliação</Label>
+              <Label htmlFor="filtro-avaliacao">Avaliação</Label>
               <Select value={filterAvaliacao} onValueChange={setFilterAvaliacao}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="filtro-avaliacao" aria-label="Filtrar por avaliação"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
                   {avaliacoes.map(a => <SelectItem key={a.id} value={a.id}>{a.titulo}</SelectItem>)}
@@ -311,9 +311,9 @@ export default function Relatorios() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Aluno</Label>
+              <Label htmlFor="filtro-aluno">Aluno</Label>
               <Select value={filterAluno} onValueChange={setFilterAluno}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="filtro-aluno" aria-label="Filtrar por aluno"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os alunos</SelectItem>
                   {alunosFiltradosPorTurma.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
@@ -322,13 +322,13 @@ export default function Relatorios() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button variant="outline" onClick={exportCSV} disabled={resultados.length === 0}>
+            <Button variant="outline" onClick={exportCSV} disabled={resultados.length === 0} aria-label="Exportar relatório em CSV">
               <Download className="w-4 h-4 mr-2" />CSV
             </Button>
-            <Button variant="outline" onClick={exportXLSX} disabled={resultados.length === 0}>
+            <Button variant="outline" onClick={exportXLSX} disabled={resultados.length === 0} aria-label="Exportar relatório em XLSX">
               <FileSpreadsheet className="w-4 h-4 mr-2" />XLSX
             </Button>
-            <Button variant="outline" onClick={exportPDF} disabled={resultados.length === 0}>
+            <Button variant="outline" onClick={exportPDF} disabled={resultados.length === 0} aria-label="Exportar relatório em PDF">
               <FileText className="w-4 h-4 mr-2" />PDF
             </Button>
           </div>
@@ -486,10 +486,10 @@ export default function Relatorios() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={desempenhoQuestoes}>
+                  <BarChart data={desempenhoQuestoes} aria-label="Gráfico de acerto por questão">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} unit="%" />
                     <Tooltip formatter={(val) => `${val}%`} />
                     <Bar dataKey="percentual" fill="hsl(234, 89%, 56%)" radius={[8, 8, 0, 0]} />
                   </BarChart>
@@ -511,7 +511,7 @@ export default function Relatorios() {
                         <span>{item.competencia}</span>
                         <span className="font-medium">{item.percentual}%</span>
                       </div>
-                      <Progress value={item.percentual} />
+                      <Progress value={item.percentual} aria-label={`${item.competencia}: ${item.percentual}%`} />
                     </div>
                   ))}
                 </div>

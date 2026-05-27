@@ -378,6 +378,7 @@ export default function Correcao() {
 
               {/* Área de upload */}
               <label
+                aria-label="Área para envio de imagem do cartão resposta"
                 className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200
                   ${pasteHighlight
                     ? "border-success bg-success/10 scale-[1.01]"
@@ -495,10 +496,12 @@ export default function Correcao() {
                       <p className="text-sm font-medium text-foreground mb-3">
                         <span className="text-primary font-semibold">Q{idx + 1}.</span> {stripLeadingNumber(q.enunciado).slice(0, 120)}{stripLeadingNumber(q.enunciado).length > 120 ? "..." : ""}
                       </p>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="flex gap-2 flex-wrap" role="group" aria-label={`Alternativas da questão ${idx + 1}`}>
                         {q.alternativas?.map(a => (
                           <button
                             key={a.letra}
+                            aria-label={`Alternativa ${a.letra}`}
+                            aria-pressed={respostas[q.id] === a.letra}
                             onClick={() => setRespostas(prev => ({ ...prev, [q.id]: a.letra }))}
                             className={`
                               w-10 h-10 rounded-full text-sm font-semibold transition-all duration-200
@@ -511,7 +514,11 @@ export default function Correcao() {
                           </button>
                         ))}
                         {respostas[q.id] && (
-                          <button onClick={() => setRespostas(prev => { const r = { ...prev }; delete r[q.id]; return r; })} className="text-xs text-muted-foreground hover:text-destructive ml-2">
+                          <button
+                            aria-label={`Limpar resposta da questão ${idx + 1}`}
+                            onClick={() => setRespostas(prev => { const r = { ...prev }; delete r[q.id]; return r; })}
+                            className="text-xs text-muted-foreground hover:text-destructive ml-2"
+                          >
                             Limpar
                           </button>
                         )}

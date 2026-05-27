@@ -140,16 +140,19 @@ export default function Perfil() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Senha atual *</Label>
+            <Label htmlFor="senha-atual">Senha atual *</Label>
             <div className="relative">
               <Input
+                id="senha-atual"
                 type={showSenhaAtual ? "text" : "password"}
                 value={senhaForm.senha_atual}
                 onChange={e => setSenhaForm({ ...senhaForm, senha_atual: e.target.value })}
                 placeholder="••••••••"
+                autoComplete="current-password"
               />
               <button
                 type="button"
+                aria-label={showSenhaAtual ? "Ocultar senha atual" : "Mostrar senha atual"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 onClick={() => setShowSenhaAtual(v => !v)}
               >
@@ -159,16 +162,19 @@ export default function Perfil() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Nova senha *</Label>
+              <Label htmlFor="nova-senha">Nova senha *</Label>
               <div className="relative">
                 <Input
+                  id="nova-senha"
                   type={showNovaSenha ? "text" : "password"}
                   value={senhaForm.nova_senha}
                   onChange={e => setSenhaForm({ ...senhaForm, nova_senha: e.target.value })}
                   placeholder="Mín. 8 caracteres (letras e números)"
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
+                  aria-label={showNovaSenha ? "Ocultar nova senha" : "Mostrar nova senha"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowNovaSenha(v => !v)}
                 >
@@ -177,12 +183,14 @@ export default function Perfil() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Confirmar nova senha *</Label>
+              <Label htmlFor="confirmar-senha">Confirmar nova senha *</Label>
               <Input
+                id="confirmar-senha"
                 type="password"
                 value={senhaForm.confirmar_senha}
                 onChange={e => setSenhaForm({ ...senhaForm, confirmar_senha: e.target.value })}
                 placeholder="Repita a nova senha"
+                autoComplete="new-password"
               />
             </div>
           </div>
