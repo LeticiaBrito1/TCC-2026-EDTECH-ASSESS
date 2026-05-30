@@ -157,7 +157,7 @@ const S = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
-    paddingBottom: 90,
+    paddingBottom: 150,
     paddingHorizontal: 16,
   },
   panel: {
@@ -207,7 +207,7 @@ const S = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    bottom: 24,
+    bottom: 80,
     right: 16,
     width: 48,
     height: 48,
