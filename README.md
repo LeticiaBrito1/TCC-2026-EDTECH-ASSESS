@@ -156,3 +156,10 @@ git tag -a v1.0.0 -m "Versao 1.0.0 - Entrega TCC"
 
 Commit base: `1d3ddbe15a6251064ab4de7c53cfc68ec80e93d9`
 
+
+## Exemplos de Uso
+
+
+<img src="TCC-2026-EDTECH-ASSESS/.github/Cadastro-ezgif.com-video-to-gif-converter.gif">
+
+Tela de cadastro onde é possivel criar uma conta na plataforma para te acesso as funcionalidades do sistema
