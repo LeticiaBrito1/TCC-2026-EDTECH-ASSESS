@@ -159,7 +159,68 @@ Commit base: `1d3ddbe15a6251064ab4de7c53cfc68ec80e93d9`
 
 ## Exemplos de Uso
 
+A seguir, são apresentados alguns exemplos das principais telas e funcionalidades da plataforma **EdTech Assess**.
 
-<img src="TCC-2026-EDTECH-ASSESS/.github/Cadastro-ezgif.com-video-to-gif-converter.gif">
+### Cadastro de usuário
 
-Tela de cadastro onde é possivel criar uma conta na plataforma para te acesso as funcionalidades do sistema
+<img src=".github/Cadastro-ezgif.com-video-to-gif-converter.gif" alt="Tela de cadastro de usuário" width="700">
+
+Tela de cadastro onde o usuário pode criar uma conta para acessar as funcionalidades da plataforma.
+
+---
+
+### Login
+
+<img src=".github/Teladelogin-ezgif.com-video-to-gif-converter.gif" alt="Tela de login" width="700">
+
+Tela de login utilizada para autenticação do usuário e acesso ao sistema.
+
+---
+
+### Gerenciamento de turmas
+
+<img src=".github/Turmas-ezgif.com-video-to-gif-converter.gif" alt="Tela de gerenciamento de turmas" width="700">
+
+Tela de turmas, onde é possível criar, editar e visualizar turmas, além de consultar os alunos vinculados a cada uma delas.
+
+---
+
+### Gerenciamento de disciplinas
+
+<img src=".github/Disciplinas-ezgif.com-video-to-gif-converter.gif" alt="Tela de gerenciamento de disciplinas" width="700">
+
+Tela de disciplinas, onde o usuário pode cadastrar disciplinas e associá-las às turmas existentes.
+
+---
+
+### Gerenciamento de questões
+
+<img src=".github/Questes-ezgif.com-video-to-gif-converter.gif" alt="Tela de gerenciamento de questões" width="700">
+
+Tela de questões, onde o usuário pode criar questões manualmente ou gerar questões com apoio de Inteligência Artificial.
+
+---
+
+### Criação de avaliações
+
+<img src=".github/Avaliaes-ezgif.com-video-to-gif-converter.gif" alt="Tela de criação de avaliações" width="700">
+
+Tela de avaliações, onde o usuário pode montar provas a partir das questões cadastradas, definir pontuações, criar versões diferentes da mesma avaliação com questões embaralhadas e utilizar recursos de geração com Inteligência Artificial.
+
+---
+
+## Como contribuir com o projeto
+
+Contribuições, sugestões e feedbacks são bem-vindos.
+
+Caso encontre algum problema, tenha uma sugestão de melhoria ou queira contribuir com novas funcionalidades para a plataforma, você pode entrar em contato pelo e-mail:
+
+**leticiabritoferreiraa@gmail.com**
+
+Também é possível contribuir seguindo o fluxo abaixo:
+
+1. Faça um fork deste repositório.
+2. Crie uma branch para sua alteração:
+
+```bash
+git checkout -b minha-melhoria
