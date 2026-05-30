@@ -14,6 +14,7 @@ Plataforma inteligente de avaliações educacionais com correção automática p
 | Backend | Node.js + Express + PostgreSQL / pg-mem |
 | Mobile | React Native + Expo SDK 54 |
 | IA | Groq (llama-3.3-70b) + Tesseract.js (OCR) |
+| Banco de dados | PostgreSQL (hospedado no AWS EC2) |
 | Infra | AWS EC2 + Nginx + PM2 + Let's Encrypt |
 | CI/CD | GitHub Actions |
 | Testes | Jest + Supertest + Playwright |
@@ -65,7 +66,7 @@ npm run backend:dev   # só o backend
 npm run dev           # só o frontend
 ```
 
-O backend usa banco em memória automaticamente quando não há PostgreSQL disponível.
+O backend conecta ao PostgreSQL configurado em `DATABASE_URL`. Em desenvolvimento local, se não houver banco disponível, cai automaticamente para banco em memória (somente para testes).
 
 ---
 
@@ -139,11 +140,11 @@ Copie `backend/.env.test` como base para desenvolvimento local:
 
 | Variável | Descrição |
 |---|---|
-| `DATABASE_URL` | URL do PostgreSQL (vazio = usa banco em memória) |
-| `ALLOW_DB_FALLBACK` | `true` para usar pg-mem quando DB indisponível |
+| `DATABASE_URL` | URL de conexão com o PostgreSQL |
+| `ALLOW_DB_FALLBACK` | `true` somente em desenvolvimento local, para usar banco em memória quando não houver PostgreSQL disponível |
 | `JWT_SECRET` | Chave secreta para tokens JWT |
-| `GROQ_API_KEY` | Chave da API Groq para geração de questões |
-| `ALLOW_DIRECT_LOGIN` | `true` apenas em desenvolvimento/testes |
+| `GROQ_API_KEY` | Chave da API Groq para geração de questões por IA |
+| `ALLOW_DIRECT_LOGIN` | `true` apenas em testes automatizados (nunca em produção) |
 
 ---
 
