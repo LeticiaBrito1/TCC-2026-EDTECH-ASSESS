@@ -7,6 +7,7 @@ import { Suspense, useState, useEffect } from "react";
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { AccessibilityProvider } from '@/lib/AccessibilityContext';
+import AccessibilityWidget from '@/components/shared/AccessibilityWidget';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { appClient } from '@/api/appClient';
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ const authPageWrapper = (children) => (
         {children}
       </div>
     </div>
+    <AccessibilityWidget />
   </div>
 );
 

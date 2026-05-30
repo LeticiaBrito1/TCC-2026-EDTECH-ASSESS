@@ -10,6 +10,7 @@ import * as SecureStore from "expo-secure-store";
 import { Ionicons } from "@expo/vector-icons";
 
 import { API_BASE_URL, apiLogin, apiVerifyLoginCode, apiMe, apiRegister, apiForgotPassword } from "./src/api/client";
+import { AccessibilityProvider, AccessibilityWidget } from "./src/components/AccessibilityWidget";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import AlunosScreen from "./src/screens/AlunosScreen";
 import CorrecaoScreen from "./src/screens/CorrecaoScreen";
@@ -172,27 +173,51 @@ function LoginScreen({ onLogin, loading, error, onGoRegister, onGoForgot }) {
           <Text style={{ fontSize: 18, fontWeight: "800", color: C.dark }}>Entrar na conta</Text>
           <View style={{ gap: 4 }}>
             <Text style={authStyles.label}>Email</Text>
-            <TextInput style={authStyles.input} placeholder="seu@email.com" autoCapitalize="none"
-              keyboardType="email-address" value={email} onChangeText={setEmail} placeholderTextColor={C.muted} />
+            <TextInput
+              style={authStyles.input}
+              placeholder="seu@email.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              placeholderTextColor={C.muted}
+              accessibilityLabel="Campo de e-mail"
+              accessibilityHint="Digite seu endereço de e-mail cadastrado"
+            />
           </View>
           <View style={{ gap: 4 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={authStyles.label}>Senha</Text>
-              <Pressable onPress={onGoForgot}>
+              <Pressable onPress={onGoForgot} accessibilityLabel="Esqueci a senha" accessibilityRole="button">
                 <Text style={{ fontSize: 13, color: C.primary, fontWeight: "600" }}>Esqueci a senha</Text>
               </Pressable>
             </View>
-            <TextInput style={authStyles.input} placeholder="••••••••" secureTextEntry
-              autoCapitalize="none" value={password} onChangeText={setPassword} placeholderTextColor={C.muted} />
+            <TextInput
+              style={authStyles.input}
+              placeholder="••••••••"
+              secureTextEntry
+              autoCapitalize="none"
+              value={password}
+              onChangeText={setPassword}
+              placeholderTextColor={C.muted}
+              accessibilityLabel="Campo de senha"
+              accessibilityHint="Digite sua senha de acesso"
+            />
           </View>
-          {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
-          <Pressable onPress={() => onLogin(email.trim(), password)} disabled={loading || !email.trim() || !password}
-            style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}>
+          {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }} accessibilityRole="alert">{error}</Text> : null}
+          <Pressable
+            onPress={() => onLogin(email.trim(), password)}
+            disabled={loading || !email.trim() || !password}
+            accessibilityLabel="Entrar na conta"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: loading || !email.trim() || !password }}
+            style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}
+          >
             {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Entrar</Text>}
           </Pressable>
         </View>
 
-        <Pressable onPress={onGoRegister} style={{ alignItems: "center", padding: 8 }}>
+        <Pressable onPress={onGoRegister} accessibilityLabel="Criar conta grátis" accessibilityRole="button" style={{ alignItems: "center", padding: 8 }}>
           <Text style={{ fontSize: 14, color: C.muted }}>
             Não tem conta?{" "}
             <Text style={{ color: C.primary, fontWeight: "700" }}>Criar conta grátis</Text>
@@ -201,6 +226,7 @@ function LoginScreen({ onLogin, loading, error, onGoRegister, onGoForgot }) {
 
         <Text style={{ fontSize: 11, color: C.muted, textAlign: "center" }}>API: {API_BASE_URL}</Text>
       </ScrollView>
+      <AccessibilityWidget />
     </SafeAreaView>
   );
 }
@@ -260,7 +286,7 @@ function RegisterScreen({ onBack, onRegistered }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, gap: 20 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 8 }}>
-          <Pressable onPress={onBack} style={{ padding: 4 }}>
+          <Pressable onPress={onBack} accessibilityLabel="Voltar para o login" accessibilityRole="button" style={{ padding: 4 }}>
             <Text style={{ fontSize: 24, color: C.primary }}>‹</Text>
           </Pressable>
           <Text style={{ fontSize: 20, fontWeight: "900", color: C.dark }}>Criar conta</Text>
@@ -270,29 +296,38 @@ function RegisterScreen({ onBack, onRegistered }) {
           <View style={{ gap: 4 }}>
             <Text style={authStyles.label}>Nome completo *</Text>
             <TextInput style={authStyles.input} placeholder="Seu nome" value={form.full_name}
-              onChangeText={v => setForm({ ...form, full_name: v })} placeholderTextColor={C.muted} />
+              onChangeText={v => setForm({ ...form, full_name: v })} placeholderTextColor={C.muted}
+              accessibilityLabel="Nome completo" accessibilityHint="Digite seu nome completo" />
           </View>
           <View style={{ gap: 4 }}>
             <Text style={authStyles.label}>Email *</Text>
             <TextInput style={authStyles.input} placeholder="seu@email.com" autoCapitalize="none"
               keyboardType="email-address" value={form.email}
-              onChangeText={v => setForm({ ...form, email: v })} placeholderTextColor={C.muted} />
+              onChangeText={v => setForm({ ...form, email: v })} placeholderTextColor={C.muted}
+              accessibilityLabel="E-mail" accessibilityHint="Digite seu endereço de e-mail" />
           </View>
           <View style={{ gap: 4 }}>
             <Text style={authStyles.label}>Senha * (mín. 6 caracteres)</Text>
             <TextInput style={authStyles.input} placeholder="••••••••" secureTextEntry
               autoCapitalize="none" value={form.password}
-              onChangeText={v => setForm({ ...form, password: v })} placeholderTextColor={C.muted} />
+              onChangeText={v => setForm({ ...form, password: v })} placeholderTextColor={C.muted}
+              accessibilityLabel="Senha" accessibilityHint="Mínimo de 6 caracteres" />
           </View>
           <View style={{ gap: 4 }}>
             <Text style={authStyles.label}>Confirmar senha *</Text>
             <TextInput style={authStyles.input} placeholder="••••••••" secureTextEntry
               autoCapitalize="none" value={form.confirm}
-              onChangeText={v => setForm({ ...form, confirm: v })} placeholderTextColor={C.muted} />
+              onChangeText={v => setForm({ ...form, confirm: v })} placeholderTextColor={C.muted}
+              accessibilityLabel="Confirmar senha" accessibilityHint="Repita a senha escolhida" />
           </View>
 
-          <Pressable onPress={() => setTerms(t => !t)}
-            style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Pressable
+            onPress={() => setTerms(t => !t)}
+            accessibilityLabel="Aceitar termos de privacidade e uso"
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: terms }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+          >
             <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2,
               borderColor: terms ? C.primary : C.border,
               backgroundColor: terms ? C.primary : C.white,
@@ -306,14 +341,17 @@ function RegisterScreen({ onBack, onRegistered }) {
             </Text>
           </Pressable>
 
-          {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
+          {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }} accessibilityRole="alert">{error}</Text> : null}
 
           <Pressable onPress={submit} disabled={loading}
+            accessibilityLabel="Criar conta" accessibilityRole="button"
+            accessibilityState={{ disabled: loading }}
             style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}>
             {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Criar conta</Text>}
           </Pressable>
         </View>
       </ScrollView>
+      <AccessibilityWidget />
     </SafeAreaView>
   );
 }
@@ -339,7 +377,7 @@ function ForgotPasswordScreen({ onBack }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: "center", gap: 20 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Pressable onPress={onBack} style={{ padding: 4 }}>
+          <Pressable onPress={onBack} accessibilityLabel="Voltar para o login" accessibilityRole="button" style={{ padding: 4 }}>
             <Text style={{ fontSize: 24, color: C.primary }}>‹</Text>
           </Pressable>
           <Text style={{ fontSize: 20, fontWeight: "900", color: C.dark }}>Esqueci a senha</Text>
@@ -364,16 +402,20 @@ function ForgotPasswordScreen({ onBack }) {
             <View style={{ gap: 4 }}>
               <Text style={authStyles.label}>Email</Text>
               <TextInput style={authStyles.input} placeholder="seu@email.com" autoCapitalize="none"
-                keyboardType="email-address" value={email} onChangeText={setEmail} placeholderTextColor={C.muted} />
+                keyboardType="email-address" value={email} onChangeText={setEmail} placeholderTextColor={C.muted}
+                accessibilityLabel="E-mail cadastrado" accessibilityHint="Digite o e-mail da sua conta para receber o link de redefinição" />
             </View>
-            {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }}>{error}</Text> : null}
+            {error ? <Text style={{ color: C.danger, fontWeight: "700", fontSize: 13 }} accessibilityRole="alert">{error}</Text> : null}
             <Pressable onPress={submit} disabled={loading}
+              accessibilityLabel="Enviar link de redefinição de senha" accessibilityRole="button"
+              accessibilityState={{ disabled: loading }}
               style={({ pressed }) => [authStyles.btn, (pressed || loading) && { opacity: 0.7 }]}>
               {loading ? <ActivityIndicator color={C.white} /> : <Text style={authStyles.btnText}>Enviar link</Text>}
             </Pressable>
           </View>
         )}
       </ScrollView>
+      <AccessibilityWidget />
     </SafeAreaView>
   );
 }
@@ -417,6 +459,10 @@ const authStyles = StyleSheet.create({
 
 // ─── App root ─────────────────────────────────────────────────────────────────
 export default function App() {
+  return <AccessibilityProvider><AppRoot /></AccessibilityProvider>;
+}
+
+function AppRoot() {
   const [booting, setBooting] = useState(true);
   const [token, setToken] = useState("");
   const [user, setUser] = useState(null);
