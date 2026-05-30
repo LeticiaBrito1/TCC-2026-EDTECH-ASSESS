@@ -155,6 +155,10 @@ export const clearResetToken = async (id) => {
   );
 };
 
+export const deleteUser = async (id) => {
+  await query(`DELETE FROM app_users WHERE id = $1`, [id]);
+};
+
 export const listActiveUsers = async () => {
   const { rows } = await query(
     `

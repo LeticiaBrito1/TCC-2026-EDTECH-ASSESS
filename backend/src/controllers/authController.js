@@ -207,4 +207,14 @@ export const authController = {
     const result = await authService.devLogin(parsed.data);
     res.json(result);
   },
+
+  async deleteAccount(req, res) {
+    const schema = z.object({ senha_atual: z.string().min(1, "Informe sua senha para confirmar.") });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpError(400, parsed.error.errors[0]?.message || "Senha obrigatória.");
+    }
+    await authService.deleteAccount(req.user.id, parsed.data);
+    res.status(204).send();
+  },
 };

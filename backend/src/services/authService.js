@@ -18,6 +18,7 @@ import {
   updateUser,
   updateUserPassword,
   incrementTokenVersion,
+  deleteUser,
 } from "../models/authModel.js";
 import { sendVerificationEmail, sendLoginCodeEmail, sendPasswordResetEmail } from "./emailService.js";
 import { HttpError } from "../utils/httpError.js";
@@ -220,6 +221,14 @@ export const authService = {
     const newHash = await bcrypt.hash(nova_senha, 12);
     await updateUserPassword(userId, newHash);
     await incrementTokenVersion(userId);
+  },
+
+  async deleteAccount(userId, { senha_atual }) {
+    const user = await findUserByIdWithHash(userId);
+    if (!user) throw new HttpError(404, "Usuário não encontrado.");
+    const matches = await bcrypt.compare(senha_atual, user.password_hash);
+    if (!matches) throw new HttpError(401, "Senha incorreta. Confirme sua senha para excluir a conta.");
+    await deleteUser(userId);
   },
 
   // ── DEV ONLY: retorna JWT diretamente sem 2FA ────────────────────────────────

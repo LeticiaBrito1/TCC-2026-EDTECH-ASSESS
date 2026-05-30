@@ -15,6 +15,7 @@ router.post("/auth/reset-password", asyncHandler(authController.resetPassword));
 router.get("/auth/me", authenticate, asyncHandler(authController.me));
 router.patch("/auth/profile", authenticate, asyncHandler(authController.updateProfile));
 router.post("/auth/change-password", authenticate, asyncHandler(authController.changePassword));
+router.delete("/auth/account", authenticate, asyncHandler(authController.deleteAccount));
 
 // ── Endpoint exclusivo para testes automatizados ──────────────────────────────
 // Só ativo quando ALLOW_DIRECT_LOGIN=true (nunca em produção).

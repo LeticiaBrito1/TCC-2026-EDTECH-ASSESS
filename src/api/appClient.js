@@ -159,6 +159,8 @@ const createClient = () => {
         request("/api/auth/forgot-password", { method: "POST", skipAuth: true, body: { email } }),
       resetPassword: async (token, nova_senha) =>
         request("/api/auth/reset-password", { method: "POST", skipAuth: true, body: { token, nova_senha } }),
+      deleteAccount: async (senha_atual) =>
+        request("/api/auth/account", { method: "DELETE", body: { senha_atual } }),
       logout: () => {
         clearAuthToken();
       },

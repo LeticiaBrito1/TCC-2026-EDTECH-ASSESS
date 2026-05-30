@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { appClient } from "@/api/appClient";
 import { useAuth } from "@/lib/AuthContext";
-import { User, Lock, Save, Loader2, Eye, EyeOff } from "lucide-react";
+import { User, Lock, Save, Loader2, Eye, EyeOff, Trash2, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/use-toast";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/AlertDialog";
 import PageHeader from "@/components/shared/PageHeader";
 
 export default function Perfil() {
@@ -20,6 +21,9 @@ export default function Perfil() {
   const [isSavingSenha, setIsSavingSenha] = useState(false);
   const [showSenhaAtual, setShowSenhaAtual] = useState(false);
   const [showNovaSenha, setShowNovaSenha] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteSenha, setDeleteSenha] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (authUser) {
@@ -45,6 +49,22 @@ export default function Perfil() {
       toast({ title: "Falha ao atualizar", description: error?.message || "Não foi possível atualizar os dados.", variant: "destructive" });
     } finally {
       setIsSavingDados(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteSenha) return;
+    setIsDeleting(true);
+    try {
+      await appClient.auth.deleteAccount(deleteSenha);
+      toast({ title: "Conta excluída", description: "Sua conta foi removida com sucesso." });
+      logout();
+    } catch (error) {
+      toast({ title: "Erro ao excluir", description: error?.message || "Senha incorreta ou erro interno.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setDeleteSenha("");
     }
   };
 
@@ -200,6 +220,62 @@ export default function Perfil() {
           </Button>
         </CardContent>
       </Card>
+      {/* Zona de perigo */}
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-base font-semibold flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-4 h-4" />
+            Zona de Perigo
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Ao excluir sua conta todos os seus dados serão removidos permanentemente. Esta ação <strong>não pode ser desfeita</strong>.
+          </p>
+          <Button
+            variant="destructive"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Excluir minha conta
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Dialog de confirmação de exclusão */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={v => { setDeleteDialogOpen(v); if (!v) setDeleteSenha(""); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conta permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os seus dados (turmas, alunos, questões, avaliações) serão excluídos e não poderão ser recuperados.
+              <br /><br />
+              Para confirmar, digite sua <strong>senha atual</strong> abaixo:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 py-2">
+            <Input
+              type="password"
+              placeholder="Sua senha"
+              value={deleteSenha}
+              onChange={e => setDeleteSenha(e.target.value)}
+              autoComplete="current-password"
+              aria-label="Senha para confirmar exclusão da conta"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteSenha("")}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteAccount}
+              disabled={!deleteSenha || isDeleting}
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              {isDeleting ? "Excluindo..." : "Excluir conta"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
