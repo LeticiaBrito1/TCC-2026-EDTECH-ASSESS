@@ -200,9 +200,10 @@ export const authController = {
     if (process.env.ALLOW_DIRECT_LOGIN !== "true") {
       throw new HttpError(404, "Not found.");
     }
-    const parsed = loginSchema.safeParse(req.body);
+    const schema = z.object({ email: z.string().email() });
+    const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      throw new HttpError(400, "Payload inválido.", parsed.error.flatten());
+      throw new HttpError(400, "E-mail inválido.");
     }
     const result = await authService.devLogin(parsed.data);
     res.json(result);

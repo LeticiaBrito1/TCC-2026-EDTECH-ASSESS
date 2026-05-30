@@ -223,6 +223,16 @@ export const authService = {
     await incrementTokenVersion(userId);
   },
 
+  async devLogin({ email }) {
+    if (process.env.ALLOW_DIRECT_LOGIN !== "true") {
+      throw new HttpError(404, "Not found.");
+    }
+    const user = await findUserByEmail(email);
+    if (!user || !user.active) throw new HttpError(401, "Usuário não encontrado.");
+    const token = signToken(user);
+    return { token, user: sanitizeUser(user) };
+  },
+
   async deleteAccount(userId, { senha_atual }) {
     const user = await findUserByIdWithHash(userId);
     if (!user) throw new HttpError(404, "Usuário não encontrado.");
@@ -231,16 +241,4 @@ export const authService = {
     await deleteUser(userId);
   },
 
-  // ── DEV ONLY: retorna JWT diretamente sem 2FA ────────────────────────────────
-  async devLogin({ email, password }) {
-    if (process.env.ALLOW_DIRECT_LOGIN !== "true") {
-      throw new HttpError(404, "Not found.");
-    }
-    const user = await findUserByEmail(email);
-    if (!user || !user.active) throw new HttpError(401, "Credenciais inválidas.");
-    const matches = await bcrypt.compare(password, user.password_hash);
-    if (!matches) throw new HttpError(401, "Credenciais inválidas.");
-    const token = signToken(user);
-    return { token, user: sanitizeUser(user) };
-  },
 };
