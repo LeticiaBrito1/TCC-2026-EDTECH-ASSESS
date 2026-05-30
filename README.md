@@ -156,8 +156,3 @@ git tag -a v1.0.0 -m "Versao 1.0.0 - Entrega TCC"
 
 Commit base: `1d3ddbe15a6251064ab4de7c53cfc68ec80e93d9`
 
----
-
-## Autores
-
-Desenvolvido como Trabalho de Conclusão de Curso (TCC) — 2026.
