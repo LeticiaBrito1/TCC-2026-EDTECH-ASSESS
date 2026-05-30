@@ -224,7 +224,7 @@ Também é possível contribuir seguindo o fluxo abaixo:
 
 ```bash
 git checkout -b minha-melhoria
-
+```
 
 ## Licença
 
