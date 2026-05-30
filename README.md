@@ -224,3 +224,12 @@ Também é possível contribuir seguindo o fluxo abaixo:
 
 ```bash
 git checkout -b minha-melhoria
+
+
+## Licença
+
+Este projeto está licenciado sob a Licença MIT.
+
+Isso significa que o código pode ser utilizado, copiado, modificado e distribuído, desde que os créditos aos autores sejam mantidos.
+
+Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
