@@ -543,9 +543,12 @@ function AppRoot() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <MainTabs token={token} user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
-      </NavigationContainer>
+      <View style={{ flex: 1 }}>
+        <NavigationContainer>
+          <MainTabs token={token} user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
+        </NavigationContainer>
+        <AccessibilityWidget />
+      </View>
     </SafeAreaProvider>
   );
 }
